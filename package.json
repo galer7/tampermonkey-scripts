@@ -1,0 +1,24 @@
+{
+  "name": "tampermonkey-scripts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/galer7/tampermonkey-scripts.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/galer7/tampermonkey-scripts/issues"
+  },
+  "homepage": "https://github.com/galer7/tampermonkey-scripts#readme",
+  "devDependencies": {
+    "@types/node": "^18.11.9"
+  }
+}
