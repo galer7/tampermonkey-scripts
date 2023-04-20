@@ -20,5 +20,8 @@
   "homepage": "https://github.com/galer7/tampermonkey-scripts#readme",
   "devDependencies": {
     "@types/node": "^18.11.9"
+  },
+  "dependencies": {
+    "typescript": "^5.0.4"
   }
 }

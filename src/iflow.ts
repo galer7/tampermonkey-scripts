@@ -50,7 +50,9 @@
 
     // Pick start time: 9AM
     await tsClick(
-      document.querySelector("body > div:nth-child(10) > ul > li:nth-child(19)")
+      document.querySelector(
+        "body > div.ui-timepicker-wrapper.shepherd-target > ul > li:nth-child(19)"
+      )
     );
 
     // Open end time picker
@@ -58,7 +60,7 @@
 
     // Pick end time: 5PM
     await tsClick(
-      document.querySelector("body > div:nth-child(11) > ul > li:nth-child(35)")
+      document.querySelector("body > div:nth-child(12) > ul > li:nth-child(35)")
     );
 
     // Submit form with click
