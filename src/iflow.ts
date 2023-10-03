@@ -8,6 +8,7 @@
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=iflow.ro
 // @grant        none
 // ==/UserScript==
+
 (function () {
   function wait(ms: number) {
     return new Promise(function (resolve, reject) {
