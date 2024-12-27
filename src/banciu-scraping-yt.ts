@@ -2,7 +2,7 @@
 // @name         Lumea Lui Banciu Video Scraper
 // @namespace    http://tampermonkey.net/
 // @version      1.0
-// @description  Scrapes YouTube videos containing "lumea lui banciu" that are 30+ minutes
+// @description  Scrapes YouTube videos containing "lumea lui banciu". Works with search and playlist results.
 // @author       You
 // @match        https://www.youtube.com/results*
 // @match        https://www.youtube.com/playlist*
