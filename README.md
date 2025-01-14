@@ -1,45 +1,70 @@
 # Tampermonkey Scripts
 
-This repository contains a collection of Tampermonkey scripts for various automation tasks.
+A collection of useful Tampermonkey scripts for various purposes.
 
-## Scripts
+## Available Scripts
 
-### 1. IFlow Auto Time Entry
-(`src/iflow.ts`)
+### Rich Content to Markdown Converter
+A script that converts webpage content to clean, well-formatted markdown using the Groq API. It preserves images, formatting, and structure while removing unnecessary elements.
 
-A Tampermonkey script that automates time entry on the IFlow platform. It automatically:
-- Opens the time entry modal
-- Selects "Home" as the work location
-- Fills in an 8-hour workday
+**Features:**
+- Converts any webpage content to markdown
+- Preserves images (as base64 or URLs)
+- Maintains headings, lists, and formatting
+- Handles large pages by splitting content
+- Easy copy-to-clipboard functionality
+- Settings button to update API key
 
-### 2. Lumea Lui Banciu Video Scraper
-(`src/banciu-scraping-yt.ts`)
+**Setup:**
+1. Install the script in Tampermonkey
+2. Get a Groq API key from [console.groq.com](https://console.groq.com)
+3. Enter your API key when prompted
+4. Click the "📝 Copy Rich Content" button on any webpage
 
-A YouTube scraping script that:
-- Scrapes videos containing "lumea lui banciu". Works with search and playlist results.
-- Collects video metadata (title, channel, duration, date, URL)
-- Provides UI controls for scraping automation
-- Supports parallel processing and data storage
-
-## Setup
-
-1. Install [Tampermonkey](https://www.tampermonkey.net/) browser extension
-2. Install dependencies:
-```bash
-pnpm install
-```
-
-3. Build the scripts:
-```bash
-pnpm build
-```
-
-4. Copy the compiled scripts from the `dist` folder into Tampermonkey
+### E-Factura Bulk Downloader (In Development)
+A script to help download multiple e-factura documents. Currently under development.
 
 ## Development
 
-The scripts are written in TypeScript and compiled to JavaScript. To modify:
+### Prerequisites
+- Node.js
+- pnpm
+- TypeScript
 
-1. Edit the source files in the `src` directory
-2. Run `pnpm build` to compile
-3. Update your Tampermonkey scripts with the new versions from `dist` 
+### Installation
+```bash
+# Install dependencies
+pnpm install
+
+# Build scripts
+pnpm build
+
+# Watch for changes during development
+pnpm dev
+```
+
+### Environment Variables
+Create a `.env` file in the root directory with your API keys:
+```env
+USERSCRIPT_GROQ_API_KEY=your_groq_api_key_here
+```
+
+### Project Structure
+```
+├── src/                # Source TypeScript files
+│   ├── groq-webscraper.ts
+│   └── efactura-bulk-downloader.ts
+├── dist/              # Compiled JavaScript files
+├── .env              # Environment variables (not committed)
+└── build.js          # Build script for injecting env variables
+```
+
+## Contributing
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+ISC License 
