@@ -5,8 +5,8 @@
 // @version      0.1
 // @description  try to take over the world!
 // @author       You
-// @match        https://app.iflow.ro/*
-// @icon         https://www.google.com/s2/favicons?sz=64&domain=iflow.ro
+// @match        https://app.hriflow.ro/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=hriflow.ro
 // @grant        none
 // ==/UserScript==
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
@@ -31,7 +31,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 yield autofill();
             }
             catch (e) {
-                console.error("[iflow autofill]", e);
+                console.error("[hriflow autofill]", e);
             }
             finally {
                 running = false;
