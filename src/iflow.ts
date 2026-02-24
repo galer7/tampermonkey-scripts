@@ -10,9 +10,34 @@
 // ==/UserScript==
 
 (function () {
-  window.onload = async function () {
-    await wait(1000);
+  let lastUrl = location.href;
+  let running = false;
 
+  async function run() {
+    if (running) return;
+    running = true;
+    try {
+      await wait(1500);
+      await autofill();
+    } catch (e) {
+      console.error("[iflow autofill]", e);
+    } finally {
+      running = false;
+    }
+  }
+
+  // Run on initial load
+  run();
+
+  // Re-run when URL changes (SPA navigation)
+  new MutationObserver(() => {
+    if (location.href !== lastUrl) {
+      lastUrl = location.href;
+      run();
+    }
+  }).observe(document.body, { childList: true, subtree: true });
+
+  async function autofill() {
     // Open modal
     await clickAndWait(
       document.querySelector(
@@ -56,7 +81,7 @@
         "#app > div.td-router-view > div > div > div.col-md-10.td-user-page-main > div.td-user-day-data > div:nth-child(3) > div > div > div.td-user-attendance-list-wrap > div > div.td-checkin-modal > div > div > div > div.modal-footer > button"
       )
     );
-  };
+  }
 })();
 
 function wait(ms: number) {
