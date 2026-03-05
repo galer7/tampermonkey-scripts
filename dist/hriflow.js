@@ -1,4 +1,3 @@
-"use strict";
 // ==UserScript==
 // @name         Autofill 8h on day page
 // @namespace    http://tampermonkey.net/

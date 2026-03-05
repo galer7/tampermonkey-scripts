@@ -1,4 +1,3 @@
-"use strict";
 // ==UserScript==
 // @name         Auto Accept Cookies
 // @namespace    http://tampermonkey.net/

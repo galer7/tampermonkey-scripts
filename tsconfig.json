@@ -72,6 +72,7 @@
         "forceConsistentCasingInFileNames": true, /* Ensure that casing is correct in imports. */
         /* Type Checking */
         "strict": true, /* Enable all strict type-checking options. */
+        "alwaysStrict": false, /* Don't emit "use strict" — it breaks Tampermonkey userscript header detection */
         // "noImplicitAny": true,                            /* Enable error reporting for expressions and declarations with an implied 'any' type. */
         // "strictNullChecks": true,                         /* When type checking, take into account 'null' and 'undefined'. */
         // "strictFunctionTypes": true,                      /* When assigning functions, check to ensure parameters and the return values are subtype-compatible. */
