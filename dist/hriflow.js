@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autofill 8h on day page
 // @namespace    http://tampermonkey.net/
-// @version      0.2
+// @version      0.3
 // @description  Auto-fill 8h attendance on hriflow day page
 // @author       You
 // @match        https://app.hriflow.ro/*
@@ -49,6 +49,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     }).observe(document.body, { childList: true, subtree: true });
     function autofill() {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             // Wait for the attendance section to load
             const totalsEl = yield waitForElement(".td-period-totals-counter");
             const totalsText = totalsEl.textContent || "";
@@ -57,6 +58,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             if (match && parseInt(match[1], 10) > 0) {
                 console.log("[hriflow autofill] Attendance already exists, skipping");
                 return;
+            }
+            // Skip if day has "Liber Colaborator" event
+            const eventWraps = document.querySelectorAll(".td-events-big-wrap .td-events-list-day-data-view");
+            for (let i = 0; i < eventWraps.length; i++) {
+                if ((_a = eventWraps[i].textContent) === null || _a === void 0 ? void 0 : _a.includes("Liber Colaborator")) {
+                    console.log("[hriflow autofill] Liber Colaborator event found, skipping");
+                    return;
+                }
             }
             // Click "Add attendance" button
             yield clickAndWait(yield waitForElement("a.td-attendance-add-btn"));

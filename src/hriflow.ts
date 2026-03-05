@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autofill 8h on day page
 // @namespace    http://tampermonkey.net/
-// @version      0.2
+// @version      0.3
 // @description  Auto-fill 8h attendance on hriflow day page
 // @author       You
 // @match        https://app.hriflow.ro/*
@@ -47,6 +47,15 @@
     if (match && parseInt(match[1], 10) > 0) {
       console.log("[hriflow autofill] Attendance already exists, skipping");
       return;
+    }
+
+    // Skip if day has "Liber Colaborator" event
+    const eventWraps = document.querySelectorAll(".td-events-big-wrap .td-events-list-day-data-view");
+    for (let i = 0; i < eventWraps.length; i++) {
+      if (eventWraps[i].textContent?.includes("Liber Colaborator")) {
+        console.log("[hriflow autofill] Liber Colaborator event found, skipping");
+        return;
+      }
     }
 
     // Click "Add attendance" button
