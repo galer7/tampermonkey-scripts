@@ -1,11 +1,13 @@
 // ==UserScript==
 // @name         Autofill 8h on day page
 // @namespace    http://tampermonkey.net/
-// @version      0.1
-// @description  try to take over the world!
+// @version      0.2
+// @description  Auto-fill 8h attendance on hriflow day page
 // @author       You
 // @match        https://app.hriflow.ro/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=hriflow.ro
+// @updateURL    https://raw.githubusercontent.com/galer7/tampermonkey-scripts/master/dist/hriflow.js
+// @downloadURL  https://raw.githubusercontent.com/galer7/tampermonkey-scripts/master/dist/hriflow.js
 // @grant        none
 // ==/UserScript==
 

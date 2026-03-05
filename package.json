@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc && cp src/*.js dist/",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "prepare": "husky"
   },
   "repository": {
     "type": "git",
@@ -20,7 +21,8 @@
   },
   "homepage": "https://github.com/galer7/tampermonkey-scripts#readme",
   "devDependencies": {
-    "@types/node": "^18.11.9"
+    "@types/node": "^18.11.9",
+    "husky": "^9.1.7"
   },
   "dependencies": {
     "typescript": "^5.0.4"
