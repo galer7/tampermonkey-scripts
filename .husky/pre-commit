@@ -1,2 +1,15 @@
+#!/bin/sh
+
+# Check that @version was bumped in any changed src/ scripts
+for file in $(git diff --cached --name-only -- 'src/*.ts'); do
+  old_version=$(git show HEAD:"$file" 2>/dev/null | sed -n 's/.*@version[[:space:]]*\([^ ]*\).*/\1/p')
+  new_version=$(sed -n 's/.*@version[[:space:]]*\([^ ]*\).*/\1/p' "$file" 2>/dev/null)
+  if [ -n "$old_version" ] && [ "$old_version" = "$new_version" ]; then
+    echo "ERROR: @version not bumped in $file (still $old_version)"
+    exit 1
+  fi
+done
+
+# Build and stage dist/
 pnpm build
 git add dist/
