@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Hide Discord Welcome Messages
 // @namespace    http://tampermonkey.net/
-// @version      0.2
+// @version      0.3
 // @description  Hides system welcome/greeting messages in Discord channels
 // @author       galer7
 // @match        https://discord.com/*
@@ -19,7 +19,10 @@
   style.id = "tm-hide-welcome-messages";
   style.textContent = `
     li[class*="messageListItem"]:has(div[class*="systemMessage"] div[class*="icon__"][style*="${WELCOME_ICON_URL}"]) {
-      display: none !important;
+      height: 0 !important;
+      overflow: hidden !important;
+      margin: 0 !important;
+      padding: 0 !important;
     }
   `;
   (document.head || document.documentElement).appendChild(style);
