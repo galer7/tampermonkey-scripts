@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autofill 8h on day page
 // @namespace    http://tampermonkey.net/
-// @version      0.3
+// @version      0.4
 // @description  Auto-fill 8h attendance on hriflow day page
 // @author       You
 // @match        https://app.hriflow.ro/*
@@ -20,7 +20,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 (function () {
-    let lastUrl = location.href;
     let running = false;
     function run() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -38,51 +37,48 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             }
         });
     }
-    // Run on initial load
-    run();
-    // Re-run when URL changes (SPA navigation)
-    new MutationObserver(() => {
-        if (location.href !== lastUrl) {
-            lastUrl = location.href;
+    document.addEventListener("dblclick", (e) => {
+        const dayCell = e.target.closest(".td-user-day");
+        if (dayCell) {
             run();
         }
-    }).observe(document.body, { childList: true, subtree: true });
+    });
     function autofill() {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            // Wait for the attendance section to load
-            const totalsEl = yield waitForElement(".td-period-totals-counter");
-            const totalsText = totalsEl.textContent || "";
-            // If total worked hours > 0, attendance already exists — skip
-            const match = totalsText.match(/Total:\s*(\d+)/);
-            if (match && parseInt(match[1], 10) > 0) {
-                console.log("[hriflow autofill] Attendance already exists, skipping");
+            var _a, _b;
+            const modal = yield waitForElement(".modal-container .modal-body");
+            // Skip if day is locked
+            if (document.querySelector(".modal-container .td-is-locked input[disabled]")) {
+                console.log("[hriflow autofill] Day is locked, skipping");
                 return;
             }
-            // Skip if day has "Liber Colaborator" event
-            const eventWraps = document.querySelectorAll(".td-events-big-wrap .td-events-list-day-data-view");
-            for (let i = 0; i < eventWraps.length; i++) {
-                if ((_a = eventWraps[i].textContent) === null || _a === void 0 ? void 0 : _a.includes("Liber Colaborator")) {
-                    console.log("[hriflow autofill] Liber Colaborator event found, skipping");
-                    return;
+            // Skip if already has hours filled
+            const totalEl = modal.querySelector(".td-total-work-hours");
+            if (totalEl && !/0h:00m/.test(totalEl.textContent || "")) {
+                console.log("[hriflow autofill] Hours already filled, skipping");
+                return;
+            }
+            // Select "Home" from location dropdown
+            const locationDropdown = yield waitForElement(".modal-container .td-select-with-search");
+            (_a = locationDropdown.querySelector(".td-search-input")) === null || _a === void 0 ? void 0 : _a.click();
+            yield wait(300);
+            const locationItems = locationDropdown.querySelectorAll(".td-list .td-item");
+            for (let i = 0; i < locationItems.length; i++) {
+                if (((_b = locationItems[i].textContent) === null || _b === void 0 ? void 0 : _b.trim()) === "Home") {
+                    locationItems[i].click();
+                    break;
                 }
             }
-            // Click "Add attendance" button
-            yield clickAndWait(yield waitForElement("a.td-attendance-add-btn"));
-            // Open location picker inside checkin modal
-            yield clickAndWait(yield waitForElement(".td-checkin-modal .td-select-single-button"));
-            // Pick location: Home
-            yield clickAndWait(yield waitForElement(".td-checkin-modal .td-elements-list a.td-element"));
-            // Open start time picker
-            yield clickAndWait(yield waitForElement("[id*='td-ckeck-in-out-start-time']"));
-            // Pick start time: 9AM
-            yield pickStartTime();
-            // Open end time picker
-            yield clickAndWait(yield waitForElement("[id*='td-ckeck-in-out-end-time']"));
-            // Pick end time: 5PM
-            yield pickEndTime();
-            // Submit form
-            yield clickAndWait(yield waitForElement(".td-checkin-modal .modal-footer .modal-default-button"));
+            yield wait(300);
+            // Fill work schedule: 9-17
+            const scheduleInput = yield waitForElement("#td-schedule-0");
+            scheduleInput.focus();
+            scheduleInput.value = "9-17";
+            scheduleInput.dispatchEvent(new Event("input", { bubbles: true }));
+            scheduleInput.dispatchEvent(new Event("change", { bubbles: true }));
+            yield wait(300);
+            // Click Apply
+            yield clickAndWait(yield waitForElement(".modal-container .td-footer-apply-button"));
         });
     }
 })();
@@ -107,43 +103,5 @@ function clickAndWait(element) {
     return __awaiter(this, void 0, void 0, function* () {
         element.click();
         yield wait(200);
-    });
-}
-function pickStartTime() {
-    return __awaiter(this, void 0, void 0, function* () {
-        var _a;
-        const start = Date.now();
-        while (Date.now() - start < 10000) {
-            const timePickerLists = document.querySelectorAll(".ui-timepicker-list");
-            if (timePickerLists.length > 0) {
-                const startListItems = timePickerLists[0].querySelectorAll("li");
-                for (let i = 0; i < startListItems.length; i++) {
-                    if ((_a = startListItems[i].textContent) === null || _a === void 0 ? void 0 : _a.includes("9:00")) {
-                        return yield clickAndWait(startListItems[i]);
-                    }
-                }
-            }
-            yield wait(500);
-        }
-        throw new Error("Start time picker not found");
-    });
-}
-function pickEndTime() {
-    return __awaiter(this, void 0, void 0, function* () {
-        var _a;
-        const start = Date.now();
-        while (Date.now() - start < 10000) {
-            const timePickerLists = document.querySelectorAll(".ui-timepicker-list");
-            if (timePickerLists.length > 1) {
-                const endListItems = timePickerLists[1].querySelectorAll("li");
-                for (let i = 0; i < endListItems.length; i++) {
-                    if ((_a = endListItems[i].textContent) === null || _a === void 0 ? void 0 : _a.includes("17:00")) {
-                        return yield clickAndWait(endListItems[i]);
-                    }
-                }
-            }
-            yield wait(500);
-        }
-        throw new Error("End time picker not found");
     });
 }

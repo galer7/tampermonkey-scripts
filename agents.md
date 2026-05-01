@@ -19,3 +19,6 @@
 2. Include `@updateURL` and `@downloadURL` pointing to `https://raw.githubusercontent.com/galer7/tampermonkey-scripts/master/dist/<name>.js`
 3. Bump `@version` on every change
 4. Commit — the pre-commit hook handles building and staging `dist/`
+
+### Conventions
+- Use stable CSS selectors (class-based) instead of fragile nth-child paths
