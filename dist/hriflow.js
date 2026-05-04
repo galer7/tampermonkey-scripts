@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iFlow Bulk Attendance
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      2.0
 // @description  Bulk-fill monthly attendance from dayData view
 // @author       galer7
 // @match        https://app.hriflow.ro/*
@@ -340,7 +340,21 @@
       panel.log(`Day ${day}: setting date...`);
       const dateInput = modal.querySelector("input.hasDatepicker");
       if (!dateInput) throw new Error("Date input not found");
-      jQuery(dateInput).datepicker("setDate", new Date(parseInt(year), parseInt(month) - 1, day));
+      dateInput.focus();
+      jQuery(dateInput).datepicker("show");
+      await wait(500);
+      const dp = document.getElementById("ui-datepicker-div");
+      if (!dp) throw new Error("Datepicker popup not found");
+      const dayCells = dp.querySelectorAll("td a");
+      let dateClicked = false;
+      for (let i = 0; i < dayCells.length; i++) {
+        if (dayCells[i].textContent?.trim() === String(day)) {
+          dayCells[i].click();
+          dateClicked = true;
+          break;
+        }
+      }
+      if (!dateClicked) throw new Error(`Day ${day} not found in datepicker`);
       await wait(200);
       panel.log(`Day ${day}: clock in ${CLOCK_IN}...`);
       const timeInputs = modal.querySelectorAll(".ui-timepicker-input");
