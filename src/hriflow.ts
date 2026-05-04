@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iFlow Bulk Attendance
 // @namespace    http://tampermonkey.net/
-// @version      2.0
+// @version      2.1
 // @description  Bulk-fill monthly attendance from dayData view
 // @author       galer7
 // @match        https://app.hriflow.ro/*
@@ -19,7 +19,6 @@ declare const jQuery: any;
 (function () {
   const CLOCK_IN = "9:00";
   const CLOCK_OUT = "17:00";
-  const USER_ID = "USER_ID";
 
   type DayStatus = "fill" | "skip-weekend" | "skip-event";
 
