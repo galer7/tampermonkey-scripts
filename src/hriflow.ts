@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iFlow Bulk Attendance
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Bulk-fill monthly attendance via "Add live attendance" modal
 // @author       galer7
 // @match        https://app.hriflow.ro/*
@@ -130,6 +130,48 @@
     throw new Error(`[iFlow] Location "${LOCATION}" not found in dropdown`);
   }
 
+  function findVisibleModal(): HTMLElement | null {
+    const masks = document.querySelectorAll<HTMLElement>(".modal-mask");
+    for (let i = 0; i < masks.length; i++) {
+      if (masks[i].style.display !== "none") {
+        const container = masks[i].querySelector(".modal-container") as HTMLElement;
+        if (container) return container;
+      }
+    }
+    return null;
+  }
+
+  async function waitForVisibleModal(timeout = 10000): Promise<HTMLElement> {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      const modal = findVisibleModal();
+      if (modal) return modal;
+      await wait(200);
+    }
+    throw new Error("[iFlow] No visible modal found");
+  }
+
+  async function selectTimepickerValue(input: HTMLInputElement, value: string) {
+    input.focus();
+    input.click();
+    await wait(400);
+
+    const wrappers = document.querySelectorAll<HTMLElement>(".ui-timepicker-wrapper");
+    for (let w = 0; w < wrappers.length; w++) {
+      const wrapper = wrappers[w];
+      if (wrapper.style.display === "none") continue;
+      const items = wrapper.querySelectorAll<HTMLElement>("li");
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].textContent?.trim() === value) {
+          items[i].click();
+          await wait(300);
+          return;
+        }
+      }
+    }
+    throw new Error(`[iFlow] Time value "${value}" not found in timepicker`);
+  }
+
   async function fillOneDay(day: number, log: (msg: string) => void): Promise<boolean> {
     log(`Day ${day}: opening modal...`);
 
@@ -138,9 +180,12 @@
     addBtn.click();
     await wait(800);
 
-    const modal = await waitForElement(".modal-container");
-    const header = modal.querySelector(".modal-header");
-    if (!header?.textContent?.includes("Add live attendance")) {
+    const modal = await waitForVisibleModal();
+    const headerText = modal.querySelector(".modal-header")?.textContent || "";
+    if (!headerText.replace(/\s+/g, " ").trim().toLowerCase().includes("add live attendance")) {
+      const cancelBtn = modal.querySelector(".cancel-btn a, .modal-close") as HTMLElement;
+      cancelBtn?.click();
+      await wait(500);
       throw new Error("[iFlow] Wrong modal opened");
     }
 
@@ -154,12 +199,13 @@
     setInputValue(dateInput, dateStr);
     await wait(300);
 
-    log(`Day ${day}: setting clock in/out...`);
+    log(`Day ${day}: setting clock in ${CLOCK_IN}...`);
     const timeInputs = modal.querySelectorAll<HTMLInputElement>(".ui-timepicker-input");
     if (timeInputs.length < 2) throw new Error("[iFlow] Time inputs not found");
-    setInputValue(timeInputs[0], CLOCK_IN);
-    await wait(200);
-    setInputValue(timeInputs[1], CLOCK_OUT);
+    await selectTimepickerValue(timeInputs[0], CLOCK_IN);
+
+    log(`Day ${day}: setting clock out ${CLOCK_OUT}...`);
+    await selectTimepickerValue(timeInputs[1], CLOCK_OUT);
     await wait(500);
 
     const errorEl = modal.querySelector(".alert-danger") as HTMLElement;
@@ -178,12 +224,12 @@
     submitBtn.click();
     await wait(DELAY_MS);
 
-    const stillOpen = document.querySelector(".modal-container .modal-header");
-    if (stillOpen?.textContent?.includes("Add live attendance")) {
-      const errorAfter = modal.querySelector(".alert-danger") as HTMLElement;
+    const stillOpen = findVisibleModal();
+    if (stillOpen) {
+      const errorAfter = stillOpen.querySelector(".alert-danger") as HTMLElement;
       if (errorAfter && errorAfter.style.display !== "none") {
         log(`Day ${day}: FAILED - ${errorAfter.textContent?.trim()}`);
-        const cancelBtn = modal.querySelector(".cancel-btn a") as HTMLElement;
+        const cancelBtn = stillOpen.querySelector(".cancel-btn a") as HTMLElement;
         cancelBtn?.click();
         await wait(500);
         return false;

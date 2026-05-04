@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iFlow Bulk Attendance
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Bulk-fill monthly attendance via "Add live attendance" modal
 // @author       galer7
 // @match        https://app.hriflow.ro/*
@@ -128,18 +128,67 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             throw new Error(`[iFlow] Location "${LOCATION}" not found in dropdown`);
         });
     }
+    function findVisibleModal() {
+        const masks = document.querySelectorAll(".modal-mask");
+        for (let i = 0; i < masks.length; i++) {
+            if (masks[i].style.display !== "none") {
+                const container = masks[i].querySelector(".modal-container");
+                if (container)
+                    return container;
+            }
+        }
+        return null;
+    }
+    function waitForVisibleModal() {
+        return __awaiter(this, arguments, void 0, function* (timeout = 10000) {
+            const start = Date.now();
+            while (Date.now() - start < timeout) {
+                const modal = findVisibleModal();
+                if (modal)
+                    return modal;
+                yield wait(200);
+            }
+            throw new Error("[iFlow] No visible modal found");
+        });
+    }
+    function selectTimepickerValue(input, value) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            input.focus();
+            input.click();
+            yield wait(400);
+            const wrappers = document.querySelectorAll(".ui-timepicker-wrapper");
+            for (let w = 0; w < wrappers.length; w++) {
+                const wrapper = wrappers[w];
+                if (wrapper.style.display === "none")
+                    continue;
+                const items = wrapper.querySelectorAll("li");
+                for (let i = 0; i < items.length; i++) {
+                    if (((_a = items[i].textContent) === null || _a === void 0 ? void 0 : _a.trim()) === value) {
+                        items[i].click();
+                        yield wait(300);
+                        return;
+                    }
+                }
+            }
+            throw new Error(`[iFlow] Time value "${value}" not found in timepicker`);
+        });
+    }
     function fillOneDay(day, log) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d;
+            var _a, _b, _c;
             log(`Day ${day}: opening modal...`);
             const addBtn = document.querySelector(".td-attendance-add-btn");
             if (!addBtn)
                 throw new Error("[iFlow] 'Add attendance' button not found");
             addBtn.click();
             yield wait(800);
-            const modal = yield waitForElement(".modal-container");
-            const header = modal.querySelector(".modal-header");
-            if (!((_a = header === null || header === void 0 ? void 0 : header.textContent) === null || _a === void 0 ? void 0 : _a.includes("Add live attendance"))) {
+            const modal = yield waitForVisibleModal();
+            const headerText = ((_a = modal.querySelector(".modal-header")) === null || _a === void 0 ? void 0 : _a.textContent) || "";
+            if (!headerText.replace(/\s+/g, " ").trim().toLowerCase().includes("add live attendance")) {
+                const cancelBtn = modal.querySelector(".cancel-btn a, .modal-close");
+                cancelBtn === null || cancelBtn === void 0 ? void 0 : cancelBtn.click();
+                yield wait(500);
                 throw new Error("[iFlow] Wrong modal opened");
             }
             log(`Day ${day}: selecting location...`);
@@ -151,13 +200,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             const dateStr = getDateForDay(day);
             setInputValue(dateInput, dateStr);
             yield wait(300);
-            log(`Day ${day}: setting clock in/out...`);
+            log(`Day ${day}: setting clock in ${CLOCK_IN}...`);
             const timeInputs = modal.querySelectorAll(".ui-timepicker-input");
             if (timeInputs.length < 2)
                 throw new Error("[iFlow] Time inputs not found");
-            setInputValue(timeInputs[0], CLOCK_IN);
-            yield wait(200);
-            setInputValue(timeInputs[1], CLOCK_OUT);
+            yield selectTimepickerValue(timeInputs[0], CLOCK_IN);
+            log(`Day ${day}: setting clock out ${CLOCK_OUT}...`);
+            yield selectTimepickerValue(timeInputs[1], CLOCK_OUT);
             yield wait(500);
             const errorEl = modal.querySelector(".alert-danger");
             if (errorEl && errorEl.style.display !== "none") {
@@ -174,12 +223,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 throw new Error("[iFlow] Submit button not found");
             submitBtn.click();
             yield wait(DELAY_MS);
-            const stillOpen = document.querySelector(".modal-container .modal-header");
-            if ((_c = stillOpen === null || stillOpen === void 0 ? void 0 : stillOpen.textContent) === null || _c === void 0 ? void 0 : _c.includes("Add live attendance")) {
-                const errorAfter = modal.querySelector(".alert-danger");
+            const stillOpen = findVisibleModal();
+            if (stillOpen) {
+                const errorAfter = stillOpen.querySelector(".alert-danger");
                 if (errorAfter && errorAfter.style.display !== "none") {
-                    log(`Day ${day}: FAILED - ${(_d = errorAfter.textContent) === null || _d === void 0 ? void 0 : _d.trim()}`);
-                    const cancelBtn = modal.querySelector(".cancel-btn a");
+                    log(`Day ${day}: FAILED - ${(_c = errorAfter.textContent) === null || _c === void 0 ? void 0 : _c.trim()}`);
+                    const cancelBtn = stillOpen.querySelector(".cancel-btn a");
                     cancelBtn === null || cancelBtn === void 0 ? void 0 : cancelBtn.click();
                     yield wait(500);
                     return false;
