@@ -14,10 +14,17 @@
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
-(function () {
+
+(() => {
+  // src/old-reddit.ts
+  (function() {
     const url = window.location.href;
-    const newUrl = url.replace(/^(https?:\/\/)(www\.|new\.|sh\.)?reddit\.com/, "$1old.reddit.com");
+    const newUrl = url.replace(
+      /^(https?:\/\/)(www\.|new\.|sh\.)?reddit\.com/,
+      "$1old.reddit.com"
+    );
     if (url !== newUrl) {
-        window.location.replace(newUrl);
+      window.location.replace(newUrl);
     }
+  })();
 })();

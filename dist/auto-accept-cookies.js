@@ -10,102 +10,105 @@
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
-(function () {
+
+(() => {
+  // src/auto-accept-cookies.ts
+  (function() {
     const BUTTON_SELECTORS = [
-        // Common cookie consent button selectors
-        '[id*="accept" i][id*="cookie" i]',
-        '[id*="cookie" i][id*="accept" i]',
-        '[class*="accept" i][class*="cookie" i]',
-        '[class*="cookie" i][class*="accept" i]',
-        '[aria-label*="accept" i][aria-label*="cookie" i]',
-        '[aria-label*="accept all" i]',
-        '[data-testid*="accept" i]',
-        // CookieBot
-        "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
-        "#CybotCookiebotDialogBodyButtonAccept",
-        // OneTrust
-        "#onetrust-accept-btn-handler",
-        // Quantcast / CMP
-        '.qc-cmp2-summary-buttons button[mode="primary"]',
-        // Cookielaw
-        ".cookielaw-accept",
-        // Generic patterns
-        'button[class*="consent" i][class*="accept" i]',
-        'button[class*="agree" i]',
-        'a[class*="agree" i]',
-        // GDPR banners
-        ".gdpr-accept",
-        '[data-gdpr="accept"]',
-        // Common button text matches via aria/title
-        '[title*="Accept all" i]',
-        '[title*="Accept cookies" i]',
+      // Common cookie consent button selectors
+      '[id*="accept" i][id*="cookie" i]',
+      '[id*="cookie" i][id*="accept" i]',
+      '[class*="accept" i][class*="cookie" i]',
+      '[class*="cookie" i][class*="accept" i]',
+      '[aria-label*="accept" i][aria-label*="cookie" i]',
+      '[aria-label*="accept all" i]',
+      '[data-testid*="accept" i]',
+      // CookieBot
+      "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+      "#CybotCookiebotDialogBodyButtonAccept",
+      // OneTrust
+      "#onetrust-accept-btn-handler",
+      // Quantcast / CMP
+      '.qc-cmp2-summary-buttons button[mode="primary"]',
+      // Cookielaw
+      ".cookielaw-accept",
+      // Generic patterns
+      'button[class*="consent" i][class*="accept" i]',
+      'button[class*="agree" i]',
+      'a[class*="agree" i]',
+      // GDPR banners
+      ".gdpr-accept",
+      '[data-gdpr="accept"]',
+      // Common button text matches via aria/title
+      '[title*="Accept all" i]',
+      '[title*="Accept cookies" i]'
     ];
     const BANNER_SELECTORS = [
-        "#cookie-banner",
-        "#cookie-consent",
-        "#cookiebanner",
-        ".cookie-banner",
-        ".cookie-consent",
-        '[class*="cookie-banner" i]',
-        '[class*="cookie-consent" i]',
-        '[class*="cookie-notice" i]',
-        '[id*="cookie-banner" i]',
-        '[id*="cookie-consent" i]',
-        '[id*="cookie-notice" i]',
-        "#CybotCookiebotDialog",
-        "#onetrust-banner-sdk",
-        ".qc-cmp2-container",
+      "#cookie-banner",
+      "#cookie-consent",
+      "#cookiebanner",
+      ".cookie-banner",
+      ".cookie-consent",
+      '[class*="cookie-banner" i]',
+      '[class*="cookie-consent" i]',
+      '[class*="cookie-notice" i]',
+      '[id*="cookie-banner" i]',
+      '[id*="cookie-consent" i]',
+      '[id*="cookie-notice" i]',
+      "#CybotCookiebotDialog",
+      "#onetrust-banner-sdk",
+      ".qc-cmp2-container"
     ];
     function clickAcceptButton() {
-        var _a;
-        for (const selector of BUTTON_SELECTORS) {
-            const btn = document.querySelector(selector);
-            if (btn && btn.offsetParent !== null) {
-                btn.click();
-                console.log("[auto-accept-cookies] Clicked:", selector);
-                return true;
-            }
+      for (const selector of BUTTON_SELECTORS) {
+        const btn = document.querySelector(selector);
+        if (btn && btn.offsetParent !== null) {
+          btn.click();
+          console.log("[auto-accept-cookies] Clicked:", selector);
+          return true;
         }
-        // Fallback: find buttons by text content
-        const buttons = document.querySelectorAll('button, a[role="button"], a.btn, input[type="submit"]');
-        const acceptPatterns = /^(accept( all)?|agree|allow( all)?|got it|ok|i agree|consent|allow cookies|accept cookies)$/i;
-        for (let i = 0; i < buttons.length; i++) {
-            const btn = buttons[i];
-            const text = ((_a = btn.textContent) === null || _a === void 0 ? void 0 : _a.trim()) || "";
-            if (acceptPatterns.test(text) && btn.offsetParent !== null) {
-                btn.click();
-                console.log("[auto-accept-cookies] Clicked button with text:", text);
-                return true;
-            }
+      }
+      const buttons = document.querySelectorAll(
+        'button, a[role="button"], a.btn, input[type="submit"]'
+      );
+      const acceptPatterns = /^(accept( all)?|agree|allow( all)?|got it|ok|i agree|consent|allow cookies|accept cookies)$/i;
+      for (let i = 0; i < buttons.length; i++) {
+        const btn = buttons[i];
+        const text = btn.textContent?.trim() || "";
+        if (acceptPatterns.test(text) && btn.offsetParent !== null) {
+          btn.click();
+          console.log("[auto-accept-cookies] Clicked button with text:", text);
+          return true;
         }
-        return false;
+      }
+      return false;
     }
     function removeBanner() {
-        for (const selector of BANNER_SELECTORS) {
-            const banner = document.querySelector(selector);
-            if (banner) {
-                banner.remove();
-                console.log("[auto-accept-cookies] Removed banner:", selector);
-            }
+      for (const selector of BANNER_SELECTORS) {
+        const banner = document.querySelector(selector);
+        if (banner) {
+          banner.remove();
+          console.log("[auto-accept-cookies] Removed banner:", selector);
         }
+      }
     }
     function removeOverlay() {
-        // Remove body scroll lock that cookie banners often add
-        document.body.style.overflow = "";
-        document.documentElement.style.overflow = "";
-        // Remove common overlay classes
-        document.body.classList.remove("cookie-modal-open", "no-scroll", "modal-open");
+      document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
+      document.body.classList.remove(
+        "cookie-modal-open",
+        "no-scroll",
+        "modal-open"
+      );
     }
     function run() {
-        const clicked = clickAcceptButton();
-        if (!clicked) {
-            // If no button found, try removing the banner directly
-            removeBanner();
-        }
-        removeOverlay();
+      const clicked = clickAcceptButton();
+      if (!clicked) {
+        removeBanner();
+      }
+      removeOverlay();
     }
-    // Run after a short delay to let banners render
-    setTimeout(run, 1000);
-    // Run again in case of lazy-loaded banners
-    setTimeout(run, 3000);
+    setTimeout(run, 1e3);
+    setTimeout(run, 3e3);
+  })();
 })();

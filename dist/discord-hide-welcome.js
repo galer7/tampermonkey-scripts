@@ -11,7 +11,10 @@
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
-(function () {
+
+(() => {
+  // src/discord-hide-welcome.ts
+  (function() {
     const WELCOME_ICON_URL = "/assets/8b9de960da063cb9.svg";
     const style = document.createElement("style");
     style.id = "tm-hide-welcome-messages";
@@ -24,4 +27,5 @@
     }
   `;
     (document.head || document.documentElement).appendChild(style);
+  })();
 })();

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iFlow Bulk Attendance
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  Bulk-fill monthly attendance via "Add live attendance" modal
 // @author       galer7
 // @match        https://app.hriflow.ro/*
@@ -11,11 +11,36 @@
 // @grant        none
 // ==/UserScript==
 
+import { wait, waitForElement, setInputValue, createPanel, probeAll, logProbeResults } from "./lib";
+import type { Panel } from "./lib";
+
 (function () {
-  const CLOCK_IN = "09:00";
+  const CLOCK_IN = "9:00";
   const CLOCK_OUT = "17:00";
   const LOCATION = "Home";
   const DELAY_MS = 1500;
+
+  const SELECTORS = {
+    dayCells: ".td-user-schedule-data .td-user-day",
+    dayNumber: ".td-day-number",
+    dayHasEvents: ".td-day-has-events",
+    addBtn: ".td-attendance-add-btn",
+    modalMask: ".modal-mask",
+    modalContainer: ".modal-container",
+    modalHeader: ".modal-header",
+    locationSelect: ".td-select-single",
+    locationName: ".td-select-single-name",
+    locationList: ".td-select-list",
+    locationSearch: "input.td-element-search",
+    locationItems: ".td-elements-list .td-item, .td-elements-list li, .td-elements-list a",
+    dateInput: "input.hasDatepicker",
+    timeInput: ".ui-timepicker-input",
+    timepickerWrapper: ".ui-timepicker-wrapper",
+    alertDanger: ".alert-danger",
+    submitBtn: ".modal-footer .modal-default-button",
+    cancelBtn: ".cancel-btn a",
+    monthDisplay: ".td-month-year-select .td-display-date",
+  };
 
   type DayStatus = "fill" | "skip-weekend" | "skip-holiday" | "skip-event";
 
@@ -25,26 +50,14 @@
     element: HTMLElement;
   }
 
-  function wait(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  async function waitForElement(selector: string, root: Element | Document = document, timeout = 10000): Promise<HTMLElement> {
-    const start = Date.now();
-    while (Date.now() - start < timeout) {
-      const el = root.querySelector(selector);
-      if (el) return el as HTMLElement;
-      await wait(200);
-    }
-    throw new Error(`[iFlow] Element not found: ${selector}`);
-  }
+  let panel: Panel;
 
   function getDayCells(): DayInfo[] {
-    const cells = document.querySelectorAll<HTMLElement>(".td-user-schedule-data .td-user-day");
+    const cells = document.querySelectorAll<HTMLElement>(SELECTORS.dayCells);
     const results: DayInfo[] = [];
 
     cells.forEach((cell) => {
-      const dayNumEl = cell.querySelector(".td-day-number");
+      const dayNumEl = cell.querySelector(SELECTORS.dayNumber);
       if (!dayNumEl) return;
       const day = parseInt(dayNumEl.textContent?.trim() || "0", 10);
       if (!day) return;
@@ -55,7 +68,7 @@
         status = "skip-weekend";
       } else if (cell.classList.contains("td-is-company-free-day")) {
         status = "skip-holiday";
-      } else if (cell.querySelector(".td-day-has-events")) {
+      } else if (cell.querySelector(SELECTORS.dayHasEvents)) {
         status = "skip-event";
       }
 
@@ -66,7 +79,7 @@
   }
 
   function getDateForDay(day: number): string {
-    const monthYearText = document.querySelector(".td-month-year-select .td-display-date")?.textContent?.trim() || "";
+    const monthYearText = document.querySelector(SELECTORS.monthDisplay)?.textContent?.trim() || "";
     const match = monthYearText.match(/(\w+)\s+(\d{4})/);
     if (!match) {
       const now = new Date();
@@ -87,54 +100,11 @@
     return `${String(day).padStart(2, "0")}/${monthStr}/${year}`;
   }
 
-  function setInputValue(input: HTMLInputElement, value: string) {
-    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLInputElement.prototype, "value"
-    )?.set;
-    if (nativeInputValueSetter) {
-      nativeInputValueSetter.call(input, value);
-    } else {
-      input.value = value;
-    }
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-    input.dispatchEvent(new Event("blur", { bubbles: true }));
-  }
-
-  async function selectLocation(modal: HTMLElement) {
-    const selectWrap = modal.querySelector(".td-select-single") as HTMLElement;
-    if (!selectWrap) throw new Error("[iFlow] Location dropdown not found");
-
-    const currentName = selectWrap.querySelector(".td-select-single-name")?.textContent?.trim();
-    if (currentName === LOCATION) return;
-
-    selectWrap.click();
-    await wait(500);
-
-    const listWrap = await waitForElement(".td-select-list", selectWrap, 5000);
-    const searchInput = listWrap.querySelector("input.td-element-search") as HTMLInputElement;
-    if (searchInput) {
-      setInputValue(searchInput, LOCATION);
-      await wait(500);
-    }
-
-    const items = listWrap.querySelectorAll<HTMLElement>(".td-elements-list .td-item, .td-elements-list li, .td-elements-list a");
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.textContent?.trim().includes(LOCATION)) {
-        (item as HTMLElement).click();
-        await wait(300);
-        return;
-      }
-    }
-    throw new Error(`[iFlow] Location "${LOCATION}" not found in dropdown`);
-  }
-
   function findVisibleModal(): HTMLElement | null {
-    const masks = document.querySelectorAll<HTMLElement>(".modal-mask");
+    const masks = document.querySelectorAll<HTMLElement>(SELECTORS.modalMask);
     for (let i = 0; i < masks.length; i++) {
       if (masks[i].style.display !== "none") {
-        const container = masks[i].querySelector(".modal-container") as HTMLElement;
+        const container = masks[i].querySelector(SELECTORS.modalContainer) as HTMLElement;
         if (container) return container;
       }
     }
@@ -148,7 +118,35 @@
       if (modal) return modal;
       await wait(200);
     }
-    throw new Error("[iFlow] No visible modal found");
+    throw new Error("No visible modal found");
+  }
+
+  async function selectLocation(modal: HTMLElement) {
+    const selectWrap = modal.querySelector(SELECTORS.locationSelect) as HTMLElement;
+    if (!selectWrap) throw new Error("Location dropdown not found");
+
+    const currentName = selectWrap.querySelector(SELECTORS.locationName)?.textContent?.trim();
+    if (currentName === LOCATION) return;
+
+    selectWrap.click();
+    await wait(500);
+
+    const listWrap = await waitForElement(SELECTORS.locationList, selectWrap, 5000);
+    const searchInput = listWrap.querySelector(SELECTORS.locationSearch) as HTMLInputElement;
+    if (searchInput) {
+      setInputValue(searchInput, LOCATION);
+      await wait(500);
+    }
+
+    const items = listWrap.querySelectorAll<HTMLElement>(SELECTORS.locationItems);
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].textContent?.trim().includes(LOCATION)) {
+        items[i].click();
+        await wait(300);
+        return;
+      }
+    }
+    throw new Error(`Location "${LOCATION}" not found in dropdown`);
   }
 
   async function selectTimepickerValue(input: HTMLInputElement, value: string) {
@@ -156,7 +154,7 @@
     input.click();
     await wait(400);
 
-    const wrappers = document.querySelectorAll<HTMLElement>(".ui-timepicker-wrapper");
+    const wrappers = document.querySelectorAll<HTMLElement>(SELECTORS.timepickerWrapper);
     for (let w = 0; w < wrappers.length; w++) {
       const wrapper = wrappers[w];
       if (wrapper.style.display === "none") continue;
@@ -169,126 +167,77 @@
         }
       }
     }
-    throw new Error(`[iFlow] Time value "${value}" not found in timepicker`);
+    throw new Error(`Time value "${value}" not found in timepicker`);
   }
 
-  async function fillOneDay(day: number, log: (msg: string) => void): Promise<boolean> {
-    log(`Day ${day}: opening modal...`);
+  async function fillOneDay(day: number): Promise<boolean> {
+    panel.log(`Day ${day}: opening modal...`);
 
-    const addBtn = document.querySelector(".td-attendance-add-btn") as HTMLElement;
-    if (!addBtn) throw new Error("[iFlow] 'Add attendance' button not found");
+    const addBtn = document.querySelector(SELECTORS.addBtn) as HTMLElement;
+    if (!addBtn) throw new Error("'Add attendance' button not found");
     addBtn.click();
     await wait(800);
 
     const modal = await waitForVisibleModal();
-    const headerText = modal.querySelector(".modal-header")?.textContent || "";
+    const headerText = modal.querySelector(SELECTORS.modalHeader)?.textContent || "";
     if (!headerText.replace(/\s+/g, " ").trim().toLowerCase().includes("add live attendance")) {
-      const cancelBtn = modal.querySelector(".cancel-btn a, .modal-close") as HTMLElement;
+      const cancelBtn = modal.querySelector(`${SELECTORS.cancelBtn}, .modal-close`) as HTMLElement;
       cancelBtn?.click();
       await wait(500);
-      throw new Error("[iFlow] Wrong modal opened");
+      throw new Error("Wrong modal opened");
     }
 
-    log(`Day ${day}: selecting location...`);
+    panel.log(`Day ${day}: selecting location...`);
     await selectLocation(modal);
 
-    log(`Day ${day}: setting date...`);
-    const dateInput = modal.querySelector("input.hasDatepicker") as HTMLInputElement;
-    if (!dateInput) throw new Error("[iFlow] Date input not found");
-    const dateStr = getDateForDay(day);
-    setInputValue(dateInput, dateStr);
+    panel.log(`Day ${day}: setting date...`);
+    const dateInput = modal.querySelector(SELECTORS.dateInput) as HTMLInputElement;
+    if (!dateInput) throw new Error("Date input not found");
+    setInputValue(dateInput, getDateForDay(day));
     await wait(300);
 
-    log(`Day ${day}: setting clock in ${CLOCK_IN}...`);
-    const timeInputs = modal.querySelectorAll<HTMLInputElement>(".ui-timepicker-input");
-    if (timeInputs.length < 2) throw new Error("[iFlow] Time inputs not found");
+    panel.log(`Day ${day}: setting clock in ${CLOCK_IN}...`);
+    const timeInputs = modal.querySelectorAll<HTMLInputElement>(SELECTORS.timeInput);
+    if (timeInputs.length < 2) throw new Error("Time inputs not found");
     await selectTimepickerValue(timeInputs[0], CLOCK_IN);
 
-    log(`Day ${day}: setting clock out ${CLOCK_OUT}...`);
+    panel.log(`Day ${day}: setting clock out ${CLOCK_OUT}...`);
     await selectTimepickerValue(timeInputs[1], CLOCK_OUT);
     await wait(500);
 
-    const errorEl = modal.querySelector(".alert-danger") as HTMLElement;
+    const errorEl = modal.querySelector(SELECTORS.alertDanger) as HTMLElement;
     if (errorEl && errorEl.style.display !== "none") {
       const errMsg = errorEl.textContent?.trim() || "Unknown error";
-      log(`Day ${day}: ERROR - ${errMsg}`);
-      const cancelBtn = modal.querySelector(".cancel-btn a") as HTMLElement;
+      panel.log(`Day ${day}: ERROR - ${errMsg}`);
+      const cancelBtn = modal.querySelector(SELECTORS.cancelBtn) as HTMLElement;
       cancelBtn?.click();
       await wait(500);
       return false;
     }
 
-    log(`Day ${day}: submitting...`);
-    const submitBtn = modal.querySelector(".modal-footer .modal-default-button") as HTMLElement;
-    if (!submitBtn) throw new Error("[iFlow] Submit button not found");
+    panel.log(`Day ${day}: submitting...`);
+    const submitBtn = modal.querySelector(SELECTORS.submitBtn) as HTMLElement;
+    if (!submitBtn) throw new Error("Submit button not found");
     submitBtn.click();
     await wait(DELAY_MS);
 
     const stillOpen = findVisibleModal();
     if (stillOpen) {
-      const errorAfter = stillOpen.querySelector(".alert-danger") as HTMLElement;
+      const errorAfter = stillOpen.querySelector(SELECTORS.alertDanger) as HTMLElement;
       if (errorAfter && errorAfter.style.display !== "none") {
-        log(`Day ${day}: FAILED - ${errorAfter.textContent?.trim()}`);
-        const cancelBtn = stillOpen.querySelector(".cancel-btn a") as HTMLElement;
+        panel.log(`Day ${day}: FAILED - ${errorAfter.textContent?.trim()}`);
+        const cancelBtn = stillOpen.querySelector(SELECTORS.cancelBtn) as HTMLElement;
         cancelBtn?.click();
         await wait(500);
         return false;
       }
     }
 
-    log(`Day ${day}: done`);
+    panel.log(`Day ${day}: done`);
     return true;
   }
 
-  // --- UI ---
-
-  function createPanel(): HTMLElement {
-    const panel = document.createElement("div");
-    panel.id = "iflow-bulk-panel";
-    panel.style.cssText = `
-      position: fixed; bottom: 20px; right: 20px; z-index: 99999;
-      background: #1a1a2e; color: #eee; border-radius: 12px;
-      padding: 16px; font-family: system-ui, sans-serif; font-size: 13px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4); min-width: 280px; max-width: 360px;
-    `;
-
-    panel.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <strong style="font-size:14px;">iFlow Bulk Fill</strong>
-        <span id="iflow-close" style="cursor:pointer; font-size:18px; opacity:0.6;">&times;</span>
-      </div>
-      <div id="iflow-status" style="margin-bottom:12px; padding:8px; background:#0f3460; border-radius:6px; max-height:200px; overflow-y:auto; font-size:12px; line-height:1.6;"></div>
-      <div style="display:flex; gap:8px;">
-        <button id="iflow-dryrun" style="flex:1; padding:8px 12px; border:none; border-radius:6px; background:#e94560; color:#fff; cursor:pointer; font-weight:600;">Dry Run</button>
-        <button id="iflow-fill" style="flex:1; padding:8px 12px; border:none; border-radius:6px; background:#0cca4a; color:#fff; cursor:pointer; font-weight:600;">Fill Month</button>
-      </div>
-    `;
-
-    document.body.appendChild(panel);
-
-    panel.querySelector("#iflow-close")!.addEventListener("click", () => {
-      panel.style.display = panel.style.display === "none" ? "block" : "none";
-    });
-
-    panel.querySelector("#iflow-dryrun")!.addEventListener("click", dryRun);
-    panel.querySelector("#iflow-fill")!.addEventListener("click", fillMonth);
-
-    return panel;
-  }
-
-  function log(msg: string) {
-    const status = document.querySelector("#iflow-status");
-    if (status) {
-      status.innerHTML += `<div>${msg}</div>`;
-      status.scrollTop = status.scrollHeight;
-    }
-    console.log(`[iFlow] ${msg}`);
-  }
-
-  function clearLog() {
-    const status = document.querySelector("#iflow-status");
-    if (status) status.innerHTML = "";
-  }
+  // --- Overlays ---
 
   function clearOverlays() {
     document.querySelectorAll(".iflow-overlay").forEach((el) => el.remove());
@@ -313,61 +262,65 @@
     cell.appendChild(overlay);
   }
 
+  // --- Actions ---
+
+  function runProbe() {
+    panel.clear();
+    const selectorList = Object.entries(SELECTORS).map(([label, selector]) => ({ label, selector }));
+    const results = probeAll(selectorList);
+    logProbeResults(results, panel);
+  }
+
   function dryRun() {
-    clearLog();
+    panel.clear();
     clearOverlays();
     const days = getDayCells();
     let toFill = 0;
 
     for (const d of days) {
-      const cell = d.element;
       switch (d.status) {
         case "fill":
-          addOverlay(cell, "rgba(12, 202, 74, 0.5)", "FILL");
+          addOverlay(d.element, "rgba(12, 202, 74, 0.5)", "FILL");
           toFill++;
           break;
         case "skip-weekend":
-          addOverlay(cell, "rgba(100, 100, 100, 0.5)", "WE");
+          addOverlay(d.element, "rgba(100, 100, 100, 0.5)", "WE");
           break;
         case "skip-holiday":
-          addOverlay(cell, "rgba(233, 69, 96, 0.5)", "HOL");
+          addOverlay(d.element, "rgba(233, 69, 96, 0.5)", "HOL");
           break;
         case "skip-event":
-          addOverlay(cell, "rgba(163, 65, 154, 0.5)", "EVT");
+          addOverlay(d.element, "rgba(163, 65, 154, 0.5)", "EVT");
           break;
       }
     }
 
-    log(`Dry run complete: <strong>${toFill}</strong> days to fill, ${days.length - toFill} skipped`);
-    log(`<em>Overlays: <span style="color:#0cca4a">GREEN</span>=fill, <span style="color:#666">GREY</span>=weekend, <span style="color:#e94560">RED</span>=holiday, <span style="color:#a3419a">PURPLE</span>=event</em>`);
+    panel.log(`Dry run: <strong>${toFill}</strong> to fill, ${days.length - toFill} skipped`);
+    panel.log(`<em><span style="color:#0cca4a">GREEN</span>=fill <span style="color:#666">GREY</span>=weekend <span style="color:#e94560">RED</span>=holiday <span style="color:#a3419a">PURPLE</span>=event</em>`);
   }
 
   async function fillMonth() {
-    clearLog();
+    panel.clear();
     clearOverlays();
     const days = getDayCells();
     const toFill = days.filter((d) => d.status === "fill");
 
     if (toFill.length === 0) {
-      log("Nothing to fill — all days are weekends, holidays, or already have events.");
+      panel.log("Nothing to fill — all days are weekends, holidays, or already have events.");
       return;
     }
 
-    log(`Starting fill for <strong>${toFill.length}</strong> days...`);
+    panel.log(`Starting fill for <strong>${toFill.length}</strong> days...`);
 
-    const fillBtn = document.querySelector("#iflow-fill") as HTMLButtonElement;
-    const dryBtn = document.querySelector("#iflow-dryrun") as HTMLButtonElement;
-    fillBtn.disabled = true;
-    dryBtn.disabled = true;
-    fillBtn.style.opacity = "0.5";
-    dryBtn.style.opacity = "0.5";
+    const buttons = panel.element.querySelectorAll<HTMLButtonElement>("button");
+    buttons.forEach((b) => { b.disabled = true; b.style.opacity = "0.5"; });
 
     let success = 0;
     let failed = 0;
 
     for (const d of toFill) {
       try {
-        const ok = await fillOneDay(d.day, log);
+        const ok = await fillOneDay(d.day);
         if (ok) {
           success++;
           addOverlay(d.element, "rgba(12, 202, 74, 0.6)", "OK");
@@ -375,40 +328,46 @@
           failed++;
           addOverlay(d.element, "rgba(233, 69, 96, 0.6)", "ERR");
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         failed++;
-        log(`Day ${d.day}: EXCEPTION - ${e.message}`);
+        panel.logError(e);
         addOverlay(d.element, "rgba(233, 69, 96, 0.6)", "ERR");
-        const openModal = document.querySelector(".modal-container .cancel-btn a") as HTMLElement;
+        const openModal = findVisibleModal();
         if (openModal) {
-          openModal.click();
+          const cancelBtn = openModal.querySelector(`${SELECTORS.cancelBtn}, .modal-close`) as HTMLElement;
+          cancelBtn?.click();
           await wait(500);
         }
       }
     }
 
-    log(`<strong>Done!</strong> ${success} filled, ${failed} failed.`);
-    fillBtn.disabled = false;
-    dryBtn.disabled = false;
-    fillBtn.style.opacity = "1";
-    dryBtn.style.opacity = "1";
+    panel.log(`<strong>Done!</strong> ${success} filled, ${failed} failed.`);
+    buttons.forEach((b) => { b.disabled = false; b.style.opacity = "1"; });
   }
 
   // --- Init ---
 
   function init() {
-    if (document.getElementById("iflow-bulk-panel")) return;
+    if (document.querySelector(".tm-panel")) return;
 
     const observer = new MutationObserver(() => {
-      if (document.querySelector(".td-user-schedule-data") && !document.getElementById("iflow-bulk-panel")) {
-        createPanel();
+      if (document.querySelector(SELECTORS.dayCells) && !document.querySelector(".tm-panel")) {
+        setup();
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
-    if (document.querySelector(".td-user-schedule-data")) {
-      createPanel();
+    if (document.querySelector(SELECTORS.dayCells)) {
+      setup();
     }
+  }
+
+  function setup() {
+    panel = createPanel("iFlow Bulk Fill", [
+      { id: "iflow-probe", label: "Probe", color: "#3b82f6", onClick: runProbe },
+      { id: "iflow-dryrun", label: "Dry Run", color: "#e94560", onClick: dryRun },
+      { id: "iflow-fill", label: "Fill Month", color: "#0cca4a", onClick: fillMonth },
+    ]);
   }
 
   if (document.readyState === "loading") {
