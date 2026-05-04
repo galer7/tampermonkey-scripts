@@ -1,5 +1,11 @@
 import { WebSocketServer } from "ws";
 import { createServer } from "http";
+import { readFileSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const DIST_DIR = join(__dirname, "..", "dist");
 
 const PORT = 9876;
 const clients = new Map(); // clientId -> { ws, script, url }
@@ -71,13 +77,36 @@ const httpServer = createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === "/hotswap") {
+    const script = url.searchParams.get("script");
+    if (!script) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Need ?script=..." }));
+      return;
+    }
+    try {
+      const filePath = join(DIST_DIR, `${script}.js`);
+      const code = readFileSync(filePath, "utf-8");
+      // Strip the userscript header — it's not valid JS
+      const stripped = code.replace(/\/\/ ==UserScript==[\s\S]*?\/\/ ==\/UserScript==\n?/, "");
+      sendCommand(script, "hotswap", { code: stripped })
+        .then((result) => res.end(JSON.stringify(result)))
+        .catch((err) => { res.statusCode = 500; res.end(JSON.stringify({ error: err })); });
+    } catch (e) {
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: `Failed to read dist/${script}.js: ${e.message}` }));
+    }
+    return;
+  }
+
   res.statusCode = 404;
   res.end(JSON.stringify({
     endpoints: [
       "GET /clients — list connected scripts (supports multiple tabs)",
-      "GET /eval?script=NAME&code=CODE — eval JS in script context (broadcasts to all tabs of that script)",
-      "GET /snapshot?script=NAME&selector=SEL — get innerHTML (uses first connected tab)",
+      "GET /eval?script=NAME&code=CODE — eval JS in script context",
+      "GET /snapshot?script=NAME&selector=SEL — get innerHTML",
       "GET /probe?script=NAME&selector=SEL — check if selector exists",
+      "GET /hotswap?script=NAME — hot-reload script from dist/ without page refresh",
       "GET /logs[?script=NAME] — recent log messages, optionally filtered",
     ],
   }));
@@ -124,7 +153,8 @@ function handleMessage(ws, msg) {
 
     case "eval-result":
     case "snapshot-result":
-    case "probe-result": {
+    case "probe-result":
+    case "hotswap-result": {
       const pending = pendingRequests.get(msg.id);
       if (pending) {
         clearTimeout(pending.timer);

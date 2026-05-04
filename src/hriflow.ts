@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iFlow Bulk Attendance
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  Bulk-fill monthly attendance via "Add live attendance" modal
 // @author       galer7
 // @match        https://app.hriflow.ro/*
@@ -348,10 +348,18 @@ import type { Panel } from "./lib";
 
   // --- Init ---
 
+  let observer: MutationObserver | null = null;
+
+  function destroy() {
+    if (panel) panel.element.remove();
+    if (observer) { observer.disconnect(); observer = null; }
+    clearOverlays();
+  }
+
   function init() {
     if (document.querySelector(".tm-panel")) return;
 
-    const observer = new MutationObserver(() => {
+    observer = new MutationObserver(() => {
       if (document.querySelector(SELECTORS.dayCells) && !document.querySelector(".tm-panel")) {
         setup();
       }
@@ -371,7 +379,7 @@ import type { Panel } from "./lib";
     ]);
   }
 
-  initBridge("hriflow");
+  initBridge("hriflow", destroy);
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

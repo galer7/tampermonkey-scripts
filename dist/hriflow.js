@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iFlow Bulk Attendance
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  Bulk-fill monthly attendance via "Add live attendance" modal
 // @author       galer7
 // @match        https://app.hriflow.ro/*
@@ -69,12 +69,15 @@
   var ws = null;
   var scriptName = "unknown";
   var clientId = "";
+  var destroyFn = null;
   function generateId() {
     return Math.random().toString(36).slice(2, 8);
   }
-  function initBridge(name) {
+  function initBridge(name, onDestroy) {
+    if (destroyFn) destroyFn();
     scriptName = name;
     clientId = `${name}:${generateId()}`;
+    destroyFn = onDestroy || null;
     connect();
   }
   function connect() {
@@ -112,6 +115,23 @@
   }
   function handleCommand(msg) {
     switch (msg.type) {
+      case "hotswap": {
+        if (destroyFn) {
+          try {
+            destroyFn();
+          } catch {
+          }
+          destroyFn = null;
+        }
+        try {
+          const fn = new Function(msg.code || "");
+          fn();
+          send("hotswap-result", { id: msg.id, ok: true });
+        } catch (e) {
+          send("hotswap-result", { id: msg.id, ok: false, error: e.message });
+        }
+        break;
+      }
       case "eval": {
         try {
           const result = new Function(msg.code || "")();
@@ -566,9 +586,18 @@
         b.style.opacity = "1";
       });
     }
+    let observer = null;
+    function destroy() {
+      if (panel) panel.element.remove();
+      if (observer) {
+        observer.disconnect();
+        observer = null;
+      }
+      clearOverlays();
+    }
     function init() {
       if (document.querySelector(".tm-panel")) return;
-      const observer = new MutationObserver(() => {
+      observer = new MutationObserver(() => {
         if (document.querySelector(SELECTORS.dayCells) && !document.querySelector(".tm-panel")) {
           setup();
         }
@@ -585,7 +614,7 @@
         { id: "iflow-fill", label: "Fill Month", color: "#0cca4a", onClick: fillMonth }
       ]);
     }
-    initBridge("hriflow");
+    initBridge("hriflow", destroy);
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", init);
     } else {

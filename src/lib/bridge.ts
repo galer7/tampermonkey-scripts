@@ -4,14 +4,17 @@ const RECONNECT_INTERVAL = 5000;
 let ws: WebSocket | null = null;
 let scriptName = "unknown";
 let clientId = "";
+let destroyFn: (() => void) | null = null;
 
 function generateId(): string {
   return Math.random().toString(36).slice(2, 8);
 }
 
-export function initBridge(name: string) {
+export function initBridge(name: string, onDestroy?: () => void) {
+  if (destroyFn) destroyFn();
   scriptName = name;
   clientId = `${name}:${generateId()}`;
+  destroyFn = onDestroy || null;
   connect();
 }
 
@@ -56,6 +59,20 @@ function send(type: string, data: Record<string, unknown> = {}) {
 
 function handleCommand(msg: { type: string; id?: string; code?: string; selector?: string }) {
   switch (msg.type) {
+    case "hotswap": {
+      if (destroyFn) {
+        try { destroyFn(); } catch {}
+        destroyFn = null;
+      }
+      try {
+        const fn = new Function(msg.code || "");
+        fn();
+        send("hotswap-result", { id: msg.id, ok: true });
+      } catch (e: any) {
+        send("hotswap-result", { id: msg.id, ok: false, error: e.message });
+      }
+      break;
+    }
     case "eval": {
       try {
         const result = new Function(msg.code || "")();
