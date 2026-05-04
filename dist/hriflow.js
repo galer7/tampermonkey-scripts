@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iFlow Bulk Attendance
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  Bulk-fill monthly attendance via "Add live attendance" modal
 // @author       galer7
 // @match        https://app.hriflow.ro/*
@@ -63,6 +63,80 @@
     input.dispatchEvent(new Event("blur", { bubbles: true }));
   }
 
+  // src/lib/bridge.ts
+  var BRIDGE_URL = "ws://localhost:9876";
+  var RECONNECT_INTERVAL = 5e3;
+  var ws = null;
+  var scriptName = "unknown";
+  function initBridge(name) {
+    scriptName = name;
+    connect();
+  }
+  function connect() {
+    try {
+      ws = new WebSocket(BRIDGE_URL);
+    } catch {
+      scheduleReconnect();
+      return;
+    }
+    ws.onopen = () => {
+      send("register", { script: scriptName, url: location.href });
+    };
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        handleCommand(msg);
+      } catch {
+      }
+    };
+    ws.onclose = () => {
+      ws = null;
+      scheduleReconnect();
+    };
+    ws.onerror = () => {
+      ws?.close();
+    };
+  }
+  function scheduleReconnect() {
+    setTimeout(connect, RECONNECT_INTERVAL);
+  }
+  function send(type, data = {}) {
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type, script: scriptName, ts: Date.now(), ...data }));
+    }
+  }
+  function handleCommand(msg) {
+    switch (msg.type) {
+      case "eval": {
+        try {
+          const result = new Function(msg.code || "")();
+          send("eval-result", { id: msg.id, ok: true, result: String(result) });
+        } catch (e) {
+          send("eval-result", { id: msg.id, ok: false, error: e.message });
+        }
+        break;
+      }
+      case "snapshot": {
+        const el = document.querySelector(msg.selector || "body");
+        const html = el ? el.innerHTML.slice(0, 1e4) : null;
+        send("snapshot-result", { id: msg.id, selector: msg.selector, html });
+        break;
+      }
+      case "probe": {
+        const el = document.querySelector(msg.selector || "body");
+        send("probe-result", { id: msg.id, selector: msg.selector, found: !!el });
+        break;
+      }
+      case "ping": {
+        send("pong");
+        break;
+      }
+    }
+  }
+  function bridgeLog(level, message, data) {
+    send("log", { level, message, data });
+  }
+
   // src/lib/panel.ts
   function createPanel(title, buttons = []) {
     const panel = document.createElement("div");
@@ -100,6 +174,7 @@
       statusEl.innerHTML += `<div>${msg}</div>`;
       statusEl.scrollTop = statusEl.scrollHeight;
       console.log(`[${title}] ${msg}`);
+      bridgeLog("info", msg.replace(/<[^>]*>/g, ""));
     }
     function clear() {
       statusEl.innerHTML = "";
@@ -506,6 +581,7 @@
         { id: "iflow-fill", label: "Fill Month", color: "#0cca4a", onClick: fillMonth }
       ]);
     }
+    initBridge("hriflow");
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", init);
     } else {

@@ -17,6 +17,7 @@ export interface Panel {
 }
 
 import { SelectorError } from "./dom";
+import { bridgeLog } from "./bridge";
 
 export function createPanel(title: string, buttons: PanelButton[] = []): Panel {
   const panel = document.createElement("div");
@@ -60,6 +61,7 @@ export function createPanel(title: string, buttons: PanelButton[] = []): Panel {
     statusEl.innerHTML += `<div>${msg}</div>`;
     statusEl.scrollTop = statusEl.scrollHeight;
     console.log(`[${title}] ${msg}`);
+    bridgeLog("info", msg.replace(/<[^>]*>/g, ""));
   }
 
   function clear() {

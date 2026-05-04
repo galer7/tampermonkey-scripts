@@ -7,6 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
+    "server": "node server/index.mjs",
     "prepare": "husky"
   },
   "repository": {
@@ -26,6 +27,7 @@
     "husky": "^9.1.7"
   },
   "dependencies": {
-    "typescript": "^5.0.4"
+    "typescript": "^5.0.4",
+    "ws": "^8.20.0"
   }
 }
