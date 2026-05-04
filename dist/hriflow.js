@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iFlow Bulk Attendance
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  Bulk-fill monthly attendance via "Add live attendance" modal
 // @author       galer7
 // @match        https://app.hriflow.ro/*
@@ -68,8 +68,13 @@
   var RECONNECT_INTERVAL = 5e3;
   var ws = null;
   var scriptName = "unknown";
+  var clientId = "";
+  function generateId() {
+    return Math.random().toString(36).slice(2, 8);
+  }
   function initBridge(name) {
     scriptName = name;
+    clientId = `${name}:${generateId()}`;
     connect();
   }
   function connect() {
@@ -80,7 +85,7 @@
       return;
     }
     ws.onopen = () => {
-      send("register", { script: scriptName, url: location.href });
+      send("register", { script: scriptName, clientId, url: location.href });
     };
     ws.onmessage = (event) => {
       try {
@@ -269,11 +274,13 @@
     const CLOCK_OUT = "17:00";
     const LOCATION = "Home";
     const DELAY_MS = 1500;
-    const SELECTORS = {
+    const STATIC_SELECTORS = {
       dayCells: ".td-user-schedule-data .td-user-day",
       dayNumber: ".td-day-number",
-      dayHasEvents: ".td-day-has-events",
       addBtn: ".td-attendance-add-btn",
+      monthDisplay: ".td-month-year-select .td-display-date"
+    };
+    const DYNAMIC_SELECTORS = {
       modalMask: ".modal-mask",
       modalContainer: ".modal-container",
       modalHeader: ".modal-header",
@@ -281,15 +288,15 @@
       locationName: ".td-select-single-name",
       locationList: ".td-select-list",
       locationSearch: "input.td-element-search",
-      locationItems: ".td-elements-list .td-item, .td-elements-list li, .td-elements-list a",
+      locationItems: ".td-elements-list-wrap .td-element-wrap a.td-element",
       dateInput: "input.hasDatepicker",
       timeInput: ".ui-timepicker-input",
       timepickerWrapper: ".ui-timepicker-wrapper",
       alertDanger: ".alert-danger",
       submitBtn: ".modal-footer .modal-default-button",
-      cancelBtn: ".cancel-btn a",
-      monthDisplay: ".td-month-year-select .td-display-date"
+      cancelBtn: ".cancel-btn a"
     };
+    const SELECTORS = { ...STATIC_SELECTORS, ...DYNAMIC_SELECTORS, dayHasEvents: ".td-day-has-events" };
     let panel;
     function getDayCells() {
       const cells = document.querySelectorAll(SELECTORS.dayCells);
@@ -376,13 +383,9 @@
       if (currentName === LOCATION) return;
       selectWrap.click();
       await wait(500);
-      const listWrap = await waitForElement(SELECTORS.locationList, selectWrap, 5e3);
-      const searchInput = listWrap.querySelector(SELECTORS.locationSearch);
-      if (searchInput) {
-        setInputValue(searchInput, LOCATION);
-        await wait(500);
-      }
-      const items = listWrap.querySelectorAll(SELECTORS.locationItems);
+      await waitForElement(SELECTORS.locationItems, selectWrap, 5e3);
+      await wait(300);
+      const items = selectWrap.querySelectorAll(SELECTORS.locationItems);
       for (let i = 0; i < items.length; i++) {
         if (items[i].textContent?.trim().includes(LOCATION)) {
           items[i].click();
@@ -488,7 +491,8 @@
     }
     function runProbe() {
       panel.clear();
-      const selectorList = Object.entries(SELECTORS).map(([label, selector]) => ({ label, selector }));
+      panel.log("<em>Checking static selectors (dynamic ones only exist during interaction):</em>");
+      const selectorList = Object.entries(STATIC_SELECTORS).map(([label, selector]) => ({ label, selector }));
       const results = probeAll(selectorList);
       logProbeResults(results, panel);
     }

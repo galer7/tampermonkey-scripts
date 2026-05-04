@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iFlow Bulk Attendance
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  Bulk-fill monthly attendance via "Add live attendance" modal
 // @author       galer7
 // @match        https://app.hriflow.ro/*
@@ -20,11 +20,14 @@ import type { Panel } from "./lib";
   const LOCATION = "Home";
   const DELAY_MS = 1500;
 
-  const SELECTORS = {
+  const STATIC_SELECTORS = {
     dayCells: ".td-user-schedule-data .td-user-day",
     dayNumber: ".td-day-number",
-    dayHasEvents: ".td-day-has-events",
     addBtn: ".td-attendance-add-btn",
+    monthDisplay: ".td-month-year-select .td-display-date",
+  };
+
+  const DYNAMIC_SELECTORS = {
     modalMask: ".modal-mask",
     modalContainer: ".modal-container",
     modalHeader: ".modal-header",
@@ -32,15 +35,16 @@ import type { Panel } from "./lib";
     locationName: ".td-select-single-name",
     locationList: ".td-select-list",
     locationSearch: "input.td-element-search",
-    locationItems: ".td-elements-list .td-item, .td-elements-list li, .td-elements-list a",
+    locationItems: ".td-elements-list-wrap .td-element-wrap a.td-element",
     dateInput: "input.hasDatepicker",
     timeInput: ".ui-timepicker-input",
     timepickerWrapper: ".ui-timepicker-wrapper",
     alertDanger: ".alert-danger",
     submitBtn: ".modal-footer .modal-default-button",
     cancelBtn: ".cancel-btn a",
-    monthDisplay: ".td-month-year-select .td-display-date",
   };
+
+  const SELECTORS = { ...STATIC_SELECTORS, ...DYNAMIC_SELECTORS, dayHasEvents: ".td-day-has-events" };
 
   type DayStatus = "fill" | "skip-weekend" | "skip-holiday" | "skip-event";
 
@@ -131,14 +135,10 @@ import type { Panel } from "./lib";
     selectWrap.click();
     await wait(500);
 
-    const listWrap = await waitForElement(SELECTORS.locationList, selectWrap, 5000);
-    const searchInput = listWrap.querySelector(SELECTORS.locationSearch) as HTMLInputElement;
-    if (searchInput) {
-      setInputValue(searchInput, LOCATION);
-      await wait(500);
-    }
+    await waitForElement(SELECTORS.locationItems, selectWrap, 5000);
+    await wait(300);
 
-    const items = listWrap.querySelectorAll<HTMLElement>(SELECTORS.locationItems);
+    const items = selectWrap.querySelectorAll<HTMLElement>(SELECTORS.locationItems);
     for (let i = 0; i < items.length; i++) {
       if (items[i].textContent?.trim().includes(LOCATION)) {
         items[i].click();
@@ -266,7 +266,8 @@ import type { Panel } from "./lib";
 
   function runProbe() {
     panel.clear();
-    const selectorList = Object.entries(SELECTORS).map(([label, selector]) => ({ label, selector }));
+    panel.log("<em>Checking static selectors (dynamic ones only exist during interaction):</em>");
+    const selectorList = Object.entries(STATIC_SELECTORS).map(([label, selector]) => ({ label, selector }));
     const results = probeAll(selectorList);
     logProbeResults(results, panel);
   }

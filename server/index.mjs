@@ -2,7 +2,7 @@ import { WebSocketServer } from "ws";
 import { createServer } from "http";
 
 const PORT = 9876;
-const clients = new Map(); // scriptName -> ws
+const clients = new Map(); // clientId -> { ws, script, url }
 let pendingRequests = new Map(); // id -> { resolve, timer }
 let requestId = 0;
 
@@ -13,8 +13,8 @@ const httpServer = createServer((req, res) => {
 
   if (url.pathname === "/clients") {
     const list = [];
-    for (const [name, ws] of clients) {
-      list.push({ script: name, url: ws._url, connected: ws.readyState === 1 });
+    for (const [id, info] of clients) {
+      list.push({ id, script: info.script, url: info.url, connected: info.ws.readyState === 1 });
     }
     res.end(JSON.stringify(list, null, 2));
     return;
@@ -63,18 +63,22 @@ const httpServer = createServer((req, res) => {
   }
 
   if (url.pathname === "/logs") {
-    res.end(JSON.stringify(recentLogs.slice(-100)));
+    const script = url.searchParams.get("script");
+    const logs = script
+      ? recentLogs.filter((l) => l.script === script)
+      : recentLogs;
+    res.end(JSON.stringify(logs.slice(-100)));
     return;
   }
 
   res.statusCode = 404;
   res.end(JSON.stringify({
     endpoints: [
-      "GET /clients — list connected scripts",
-      "GET /eval?script=NAME&code=CODE — eval JS in script context",
-      "GET /snapshot?script=NAME&selector=SEL — get innerHTML",
+      "GET /clients — list connected scripts (supports multiple tabs)",
+      "GET /eval?script=NAME&code=CODE — eval JS in script context (broadcasts to all tabs of that script)",
+      "GET /snapshot?script=NAME&selector=SEL — get innerHTML (uses first connected tab)",
       "GET /probe?script=NAME&selector=SEL — check if selector exists",
-      "GET /logs — recent log messages from scripts",
+      "GET /logs[?script=NAME] — recent log messages, optionally filtered",
     ],
   }));
 });
@@ -91,10 +95,10 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
-    for (const [name, client] of clients) {
-      if (client === ws) {
-        console.log(`[disconnect] ${name}`);
-        clients.delete(name);
+    for (const [id, info] of clients) {
+      if (info.ws === ws) {
+        console.log(`[disconnect] ${id}`);
+        clients.delete(id);
         break;
       }
     }
@@ -104,22 +108,23 @@ wss.on("connection", (ws) => {
 function handleMessage(ws, msg) {
   switch (msg.type) {
     case "register":
-      clients.set(msg.script, ws);
-      ws._url = msg.url;
-      console.log(`[connect] ${msg.script} @ ${msg.url}`);
+      const id = msg.clientId || msg.script;
+      clients.set(id, { ws, script: msg.script, url: msg.url });
+      console.log(`[connect] ${id} @ ${msg.url}`);
       break;
 
-    case "log":
+    case "log": {
       const entry = { ts: msg.ts, script: msg.script, level: msg.level, message: msg.message, data: msg.data };
       recentLogs.push(entry);
       if (recentLogs.length > 500) recentLogs.shift();
       const icon = { info: "ℹ", warn: "⚠", error: "✗" }[msg.level] || "•";
       console.log(`[${msg.script}] ${icon} ${msg.message}`);
       break;
+    }
 
     case "eval-result":
     case "snapshot-result":
-    case "probe-result":
+    case "probe-result": {
       const pending = pendingRequests.get(msg.id);
       if (pending) {
         clearTimeout(pending.timer);
@@ -127,16 +132,26 @@ function handleMessage(ws, msg) {
         pending.resolve(msg);
       }
       break;
+    }
 
     case "pong":
       break;
   }
 }
 
+function findClientByScript(scriptName) {
+  for (const [, info] of clients) {
+    if (info.script === scriptName && info.ws.readyState === 1) {
+      return info.ws;
+    }
+  }
+  return null;
+}
+
 function sendCommand(scriptName, type, data) {
   return new Promise((resolve, reject) => {
-    const ws = clients.get(scriptName);
-    if (!ws || ws.readyState !== 1) {
+    const ws = findClientByScript(scriptName);
+    if (!ws) {
       reject(`Script "${scriptName}" not connected`);
       return;
     }

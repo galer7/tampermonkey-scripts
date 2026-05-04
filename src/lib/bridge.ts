@@ -3,9 +3,15 @@ const RECONNECT_INTERVAL = 5000;
 
 let ws: WebSocket | null = null;
 let scriptName = "unknown";
+let clientId = "";
+
+function generateId(): string {
+  return Math.random().toString(36).slice(2, 8);
+}
 
 export function initBridge(name: string) {
   scriptName = name;
+  clientId = `${name}:${generateId()}`;
   connect();
 }
 
@@ -18,7 +24,7 @@ function connect() {
   }
 
   ws.onopen = () => {
-    send("register", { script: scriptName, url: location.href });
+    send("register", { script: scriptName, clientId, url: location.href });
   };
 
   ws.onmessage = (event) => {
