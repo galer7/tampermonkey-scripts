@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iFlow Bulk Attendance
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @description  Bulk-fill monthly attendance from dayData view
 // @author       galer7
 // @match        https://app.hriflow.ro/*
@@ -21,7 +21,7 @@ declare const jQuery: any;
   const CLOCK_OUT = "17:00";
   const USER_ID = "USER_ID";
 
-  type DayStatus = "fill" | "skip-weekend" | "skip-holiday" | "skip-event";
+  type DayStatus = "fill" | "skip-weekend" | "skip-event";
 
   interface DayInfo {
     day: number;
@@ -35,7 +35,9 @@ declare const jQuery: any;
     const cells = document.querySelectorAll<HTMLElement>(".td-user-schedule-data .td-user-day");
     const results: DayInfo[] = [];
 
-    cells.forEach((cell) => {
+    const headerCells = document.querySelectorAll<HTMLElement>(".td-week-days > div");
+
+    cells.forEach((cell, idx) => {
       const dayNumEl = cell.querySelector(".td-day-number");
       if (!dayNumEl) return;
       const day = parseInt(dayNumEl.textContent?.trim() || "0", 10);
@@ -43,10 +45,9 @@ declare const jQuery: any;
 
       let status: DayStatus = "fill";
 
-      if (cell.classList.contains("td-no-norm")) {
+      const dayName = headerCells[idx]?.querySelector(".td-week-days-align")?.textContent?.trim() || "";
+      if (dayName === "Sa" || dayName === "Su") {
         status = "skip-weekend";
-      } else if (cell.classList.contains("td-is-company-free-day")) {
-        status = "skip-holiday";
       } else if (cell.querySelector(".td-day-has-events")) {
         status = "skip-event";
       }
@@ -219,9 +220,6 @@ declare const jQuery: any;
         case "skip-weekend":
           addOverlay(d.element, "rgba(100, 100, 100, 0.5)", "WE");
           break;
-        case "skip-holiday":
-          addOverlay(d.element, "rgba(233, 69, 96, 0.5)", "HOL");
-          break;
         case "skip-event":
           addOverlay(d.element, "rgba(163, 65, 154, 0.5)", "EVT");
           break;
@@ -230,7 +228,7 @@ declare const jQuery: any;
 
     const { month, year } = getCurrentMonthYear();
     panel.log(`Dry run (${month}/${year}): <strong>${toFill}</strong> to fill, ${days.length - toFill} skipped`);
-    panel.log(`<em><span style="color:#0cca4a">GREEN</span>=fill <span style="color:#666">GREY</span>=weekend <span style="color:#e94560">RED</span>=holiday <span style="color:#a3419a">PURPLE</span>=event</em>`);
+    panel.log(`<em><span style="color:#0cca4a">GREEN</span>=fill <span style="color:#666">GREY</span>=weekend (Sa/Su only) <span style="color:#a3419a">PURPLE</span>=existing event</em>`);
   }
 
   async function fillMonth() {
