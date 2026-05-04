@@ -10,6 +10,20 @@ for file in $(git diff --cached --diff-filter=d --name-only -- 'src/*.ts'); do
   fi
 done
 
+# Check for private terms in staged files
+if [ -f .secrets ]; then
+  terms=$(grep -v '^#' .secrets | grep -v '^$' | tr '\n' '|' | sed 's/|$//')
+  if [ -n "$terms" ]; then
+    matches=$(git diff --cached --diff-filter=d -U0 -- ':!.secrets' ':!.gitignore' | grep -iE "^\+" | grep -iE "$terms" || true)
+    if [ -n "$matches" ]; then
+      echo "ERROR: Private terms found in staged changes:"
+      echo "$matches"
+      exit 1
+    fi
+    # Also check commit message won't be checked here — git-filter handles that
+  fi
+fi
+
 # Build and stage dist/
 pnpm build
 git add dist/
