@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iFlow Bulk Attendance
 // @namespace    http://tampermonkey.net/
-// @version      2.2
+// @version      2.3
 // @description  Bulk-fill monthly attendance from dayData view
 // @author       galer7
 // @match        https://app.hriflow.ro/*
@@ -235,8 +235,8 @@
 
   // src/hriflow.ts
   (function() {
-    const CLOCK_IN = "09:00";
-    const CLOCK_OUT = "17:00";
+    const CLOCK_IN = "9:00:00";
+    const CLOCK_OUT = "17:00:00";
     let panel;
     function getDayCells() {
       const cells = document.querySelectorAll(".td-user-schedule-data .td-user-day");
