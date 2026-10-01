@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iFlow Bulk Attendance
 // @namespace    http://tampermonkey.net/
-// @version      2.3
+// @version      2.4
 // @description  Bulk-fill monthly attendance from dayData view
 // @author       galer7
 // @match        https://app.hriflow.ro/*
@@ -20,7 +20,7 @@ declare const jQuery: any;
   const CLOCK_IN = "9:00:00";
   const CLOCK_OUT = "17:00:00";
 
-  type DayStatus = "fill" | "skip-weekend" | "skip-event";
+  type DayStatus = "fill" | "skip-weekend" | "skip-event" | "skip-filled";
 
   interface DayInfo {
     day: number;
@@ -30,7 +30,29 @@ declare const jQuery: any;
 
   let panel: Panel;
 
-  function getDayCells(): DayInfo[] {
+  // The calendar never marks days that already have attendance (.td-day-has-events is leave only),
+  // so ask the API that backs the attendance list which days hold an interval.
+  async function fetchFilledDays(month: string, year: string): Promise<Set<number>> {
+    const user = (document.querySelector("#app") as any)?.__vue__?.$store?.state?.user;
+    const userId = location.hash.match(/\/user\/(\d+)\//)?.[1];
+    if (!user?.session_token || !userId) throw new Error("Session token or user id not found");
+    const lastDay = new Date(Number(year), Number(month), 0).getDate();
+    const body = new URLSearchParams({
+      user_id: userId,
+      page: "-1",
+      date_interval_start: `${year}-${month}-01`,
+      date_interval_end: `${year}-${month}-${lastDay}`,
+      "api_auth[session_token]": user.session_token,
+      "api_auth[session_company_id]": user.session_company_id,
+      "api_auth[is_mobile_app]": "false",
+    });
+    const res = await fetch("/api/live_attendance/get_attendance_intervals", { method: "POST", body, credentials: "include" });
+    const days: { date: string; intervals: unknown[] }[] = (await res.json()).api_reply?.attendance_days;
+    if (!Array.isArray(days)) throw new Error("Unexpected attendance API reply");
+    return new Set(days.filter((d) => d.intervals.length > 0).map((d) => parseInt(d.date, 10)));
+  }
+
+  function getDayCells(filled: Set<number>): DayInfo[] {
     const cells = document.querySelectorAll<HTMLElement>(".td-user-schedule-data .td-user-day");
     const results: DayInfo[] = [];
 
@@ -49,6 +71,8 @@ declare const jQuery: any;
         status = "skip-weekend";
       } else if (cell.querySelector(".td-day-has-events")) {
         status = "skip-event";
+      } else if (filled.has(day)) {
+        status = "skip-filled";
       }
 
       results.push({ day, status, element: cell });
@@ -58,6 +82,8 @@ declare const jQuery: any;
   }
 
   function getCurrentMonthYear(): { month: string; year: string } {
+    const fromHash = location.hash.match(/dayData\/\d+\/(\d{2})\/(\d{4})/);
+    if (fromHash) return { month: fromHash[1], year: fromHash[2] };
     const text = document.querySelector(".td-month-date")?.textContent?.trim() || "";
     const match = text.match(/(\w+)\s+(\d{4})/);
     if (!match) {
@@ -168,19 +194,25 @@ declare const jQuery: any;
     const submitBtn = modal.querySelector(".modal-footer .modal-default-button") as HTMLElement;
     if (!submitBtn) throw new Error("Submit button not found");
     submitBtn.click();
-    await wait(1500);
+
+    // Wait for the save to close the modal; opening the next one early is what dropped days.
+    for (let i = 0; i < 40 && findVisibleModal(); i++) {
+      const errorAfter = findVisibleModal()?.querySelector(".alert-danger") as HTMLElement;
+      if (errorAfter && errorAfter.style.display !== "none" && errorAfter.textContent?.trim()) break;
+      await wait(250);
+    }
 
     const stillOpen = findVisibleModal();
     if (stillOpen) {
       const errorAfter = stillOpen.querySelector(".alert-danger") as HTMLElement;
-      if (errorAfter && errorAfter.style.display !== "none") {
-        panel.log(`Day ${day}: <span style="color:#e94560">FAILED - ${errorAfter.textContent?.trim()}</span>`);
-        const cancelBtn = stillOpen.querySelector(".cancel-btn a") as HTMLElement;
-        cancelBtn?.click();
-        await wait(500);
-        return false;
-      }
+      const errMsg = errorAfter && errorAfter.style.display !== "none" ? errorAfter.textContent?.trim() : "";
+      panel.log(`Day ${day}: <span style="color:#e94560">FAILED - ${errMsg || "modal still open after 10s"}</span>`);
+      const cancelBtn = stillOpen.querySelector(".cancel-btn a, .modal-close") as HTMLElement;
+      cancelBtn?.click();
+      await wait(500);
+      return false;
     }
+    await wait(500);
 
     panel.log(`Day ${day}: <span style="color:#0cca4a">done</span>`);
     return true;
@@ -213,10 +245,18 @@ declare const jQuery: any;
 
   // --- Actions ---
 
-  function dryRun() {
+  async function dryRun() {
     panel.clear();
     clearOverlays();
-    const days = getDayCells();
+    const { month, year } = getCurrentMonthYear();
+    let filled: Set<number>;
+    try {
+      filled = await fetchFilledDays(month, year);
+    } catch (e: unknown) {
+      panel.logError(e);
+      return;
+    }
+    const days = getDayCells(filled);
 
     if (days.length === 0) {
       panel.log("No day cells found — are you on the dayData page?");
@@ -236,59 +276,65 @@ declare const jQuery: any;
         case "skip-event":
           addOverlay(d.element, "rgba(163, 65, 154, 0.5)", "EVT");
           break;
+        case "skip-filled":
+          addOverlay(d.element, "rgba(52, 120, 246, 0.5)", "DONE");
+          break;
       }
     }
 
-    const { month, year } = getCurrentMonthYear();
     panel.log(`Dry run (${month}/${year}): <strong>${toFill}</strong> to fill, ${days.length - toFill} skipped`);
-    panel.log(`<em><span style="color:#0cca4a">GREEN</span>=fill <span style="color:#666">GREY</span>=weekend (Sa/Su only) <span style="color:#a3419a">PURPLE</span>=existing event</em>`);
+    panel.log(`<em><span style="color:#0cca4a">GREEN</span>=fill <span style="color:#3478f6">BLUE</span>=already filled <span style="color:#666">GREY</span>=weekend (Sa/Su only) <span style="color:#a3419a">PURPLE</span>=existing event</em>`);
   }
 
   async function fillMonth() {
     panel.clear();
     clearOverlays();
-    const days = getDayCells();
-    const toFill = days.filter((d) => d.status === "fill");
-
-    if (toFill.length === 0) {
-      panel.log("Nothing to fill — all days are weekends, holidays, or already have events.");
-      return;
-    }
-
     const { month, year } = getCurrentMonthYear();
-    panel.log(`Filling <strong>${toFill.length}</strong> days for ${month}/${year}...`);
 
     const buttons = panel.element.querySelectorAll<HTMLButtonElement>("button");
     buttons.forEach((b) => { b.disabled = true; b.style.opacity = "0.5"; });
 
-    let success = 0;
-    let failed = 0;
-
-    for (const d of toFill) {
-      try {
-        const ok = await fillOneDay(d.day, month, year);
-        if (ok) {
-          success++;
-          addOverlay(d.element, "rgba(12, 202, 74, 0.6)", "OK");
-        } else {
-          failed++;
-          addOverlay(d.element, "rgba(233, 69, 96, 0.6)", "ERR");
+    try {
+      // Pass 2 retries whatever pass 1 left without an interval.
+      for (let pass = 1; pass <= 2; pass++) {
+        const toFill = getDayCells(await fetchFilledDays(month, year)).filter((d) => d.status === "fill");
+        if (toFill.length === 0) {
+          if (pass === 1) panel.log("Nothing to fill — every workday already has attendance or an event.");
+          break;
         }
-      } catch (e: unknown) {
-        failed++;
-        panel.logError(e);
-        addOverlay(d.element, "rgba(233, 69, 96, 0.6)", "ERR");
-        const openModal = findVisibleModal();
-        if (openModal) {
-          const cancelBtn = openModal.querySelector(".cancel-btn a, .modal-close") as HTMLElement;
-          cancelBtn?.click();
-          await wait(500);
+        panel.log(`Pass ${pass}: filling <strong>${toFill.length}</strong> days for ${month}/${year}...`);
+
+        for (const d of toFill) {
+          try {
+            await fillOneDay(d.day, month, year);
+          } catch (e: unknown) {
+            panel.logError(e);
+            const openModal = findVisibleModal();
+            if (openModal) {
+              const cancelBtn = openModal.querySelector(".cancel-btn a, .modal-close") as HTMLElement;
+              cancelBtn?.click();
+              await wait(500);
+            }
+          }
         }
       }
-    }
 
-    panel.log(`<strong>Done!</strong> ${success} filled, ${failed} failed.`);
-    buttons.forEach((b) => { b.disabled = false; b.style.opacity = "1"; });
+      // The API is the record of truth: report what it holds, not what the modal claimed.
+      const days = getDayCells(await fetchFilledDays(month, year));
+      const missing = days.filter((d) => d.status === "fill");
+      days.forEach((d) => {
+        if (d.status === "skip-filled") addOverlay(d.element, "rgba(12, 202, 74, 0.6)", "OK");
+      });
+      missing.forEach((d) => addOverlay(d.element, "rgba(233, 69, 96, 0.6)", "ERR"));
+      const filledCount = days.filter((d) => d.status === "skip-filled").length;
+      panel.log(missing.length === 0
+        ? `<strong>Done!</strong> ${filledCount} workdays filled (${filledCount * 8}h).`
+        : `<strong>Done with gaps.</strong> Still missing: ${missing.map((d) => d.day).join(", ")}`);
+    } catch (e: unknown) {
+      panel.logError(e);
+    } finally {
+      buttons.forEach((b) => { b.disabled = false; b.style.opacity = "1"; });
+    }
   }
 
   // --- Init ---
