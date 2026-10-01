@@ -20,7 +20,7 @@ const httpServer = createServer((req, res) => {
   if (url.pathname === "/clients") {
     const list = [];
     for (const [id, info] of clients) {
-      list.push({ id, script: info.script, url: info.url, connected: info.ws.readyState === 1 });
+      list.push({ id, script: info.script, version: info.version, url: info.url, connected: info.ws.readyState === 1 });
     }
     res.end(JSON.stringify(list, null, 2));
     return;
@@ -77,6 +77,51 @@ const httpServer = createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === "/click") {
+    const script = url.searchParams.get("script");
+    const selector = url.searchParams.get("selector");
+    const text = url.searchParams.get("text");
+    const role = url.searchParams.get("role");
+    if (!script || (!selector && !text)) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Need ?script=...&selector=... or ?script=...&text=..." }));
+      return;
+    }
+    sendCommand(script, "click", { selector, text, role })
+      .then((result) => res.end(JSON.stringify(result)))
+      .catch((err) => { res.statusCode = 500; res.end(JSON.stringify({ error: err })); });
+    return;
+  }
+
+  if (url.pathname === "/navigate") {
+    const script = url.searchParams.get("script");
+    const targetUrl = url.searchParams.get("url");
+    if (!script || !targetUrl) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Need ?script=...&url=..." }));
+      return;
+    }
+    sendCommand(script, "navigate", { url: targetUrl })
+      .then((result) => res.end(JSON.stringify(result)))
+      .catch((err) => { res.statusCode = 500; res.end(JSON.stringify({ error: err })); });
+    return;
+  }
+
+  if (url.pathname === "/extract") {
+    const script = url.searchParams.get("script");
+    const selector = url.searchParams.get("selector") || "body";
+    const extract = url.searchParams.get("extract") || "text";
+    if (!script) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Need ?script=..." }));
+      return;
+    }
+    sendCommand(script, "extract", { selector, extract })
+      .then((result) => res.end(JSON.stringify(result)))
+      .catch((err) => { res.statusCode = 500; res.end(JSON.stringify({ error: err })); });
+    return;
+  }
+
   if (url.pathname === "/hotswap") {
     const script = url.searchParams.get("script");
     if (!script) {
@@ -106,6 +151,9 @@ const httpServer = createServer((req, res) => {
       "GET /eval?script=NAME&code=CODE — eval JS in script context",
       "GET /snapshot?script=NAME&selector=SEL — get innerHTML",
       "GET /probe?script=NAME&selector=SEL — check if selector exists",
+      "GET /click?script=NAME&selector=SEL|text=TEXT[&role=ROLE] — click an element",
+      "GET /navigate?script=NAME&url=URL — SPA-aware navigation (click link or pushState)",
+      "GET /extract?script=NAME&selector=SEL&extract=text|table|links|list — structured extraction (no eval)",
       "GET /hotswap?script=NAME — hot-reload script from dist/ without page refresh",
       "GET /logs[?script=NAME] — recent log messages, optionally filtered",
     ],
@@ -138,8 +186,8 @@ function handleMessage(ws, msg) {
   switch (msg.type) {
     case "register":
       const id = msg.clientId || msg.script;
-      clients.set(id, { ws, script: msg.script, url: msg.url });
-      console.log(`[connect] ${id} @ ${msg.url}`);
+      clients.set(id, { ws, script: msg.script, version: msg.version || "?", url: msg.url });
+      console.log(`[connect] ${id} v${msg.version || "?"} @ ${msg.url}`);
       break;
 
     case "log": {
@@ -154,6 +202,9 @@ function handleMessage(ws, msg) {
     case "eval-result":
     case "snapshot-result":
     case "probe-result":
+    case "click-result":
+    case "navigate-result":
+    case "extract-result":
     case "hotswap-result": {
       const pending = pendingRequests.get(msg.id);
       if (pending) {

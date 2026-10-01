@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Services Bridge
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  Bridge connector for Google Ads, GA4, Merchant Center, GSC — exposes page context via localhost:9876
 // @author       galer7
 // @match        https://ads.google.com/*
@@ -24,5 +24,5 @@ import { initBridge } from "./lib";
     "search.google.com": "gsc",
   };
   var name = names[location.hostname] || "google";
-  initBridge(name);
+  initBridge(name, { version: "1.2" });
 })();
