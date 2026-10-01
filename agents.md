@@ -63,6 +63,12 @@ A local WebSocket + HTTP server on `localhost:9876` for live debugging TM script
 
 When a `SelectorError` fires, the panel shows expandable HTML context (click to copy). Paste that to the agent for fixing.
 
+`/eval` gotchas:
+- It returns `String(result)`: `return JSON.stringify(...)`, and stringify DOM or jQuery data field by field (they are circular).
+- It does not await. Start async work, store its result on `window.__x`, and read it with a second `/eval`.
+- It goes to the first connected client with that name. `/hotswap` and duplicate tabs leave old clients connected, so read `/clients` first. Clients in one tab share the DOM.
+- For SPA data the DOM hides, call the app's own API from the page: read the auth from the app store (Vue: `document.querySelector("#app").__vue__.$store`). Keep tokens inside the page, never in the eval output.
+
 ### Conventions
 - Use stable CSS selectors (class-based) instead of fragile nth-child paths
 - Centralize selectors in a `SELECTORS` object at the top of each script for easy updates
