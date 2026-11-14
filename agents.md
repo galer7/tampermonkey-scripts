@@ -4,7 +4,7 @@
 
 ### Workflow
 - Source files live in `src/` as TypeScript
-- Shared utilities in `src/lib/` (dom, panel, probe, toast, bridge)
+- Shared utilities in `src/lib/` (dom, panel, probe, toast)
 - Build via esbuild (`pnpm build`) — each `src/*.ts` is bundled with lib inlined
 - Files in `src/lib/` are NOT entry points — they get tree-shaken into scripts that import them
 - Built JS files go to `dist/` and are committed to the repo
@@ -19,25 +19,6 @@
 | panel | `createPanel` | Floating debug panel with log, buttons, error display |
 | probe | `probe`, `probeAll`, `logProbeResults` | Selector health-check |
 | toast | `toast` | Non-blocking notifications |
-| bridge | `initBridge`, `bridgeLog` | WebSocket client to local debug server |
-
-### Bridge Server (`pnpm server`)
-A local WebSocket + HTTP server on `localhost:9876` for live debugging TM scripts from CLI.
-
-**Starting**: `pnpm server` (or `node server/index.mjs`)
-
-**HTTP Endpoints** (for agent/CLI access):
-| Endpoint | Purpose |
-|----------|---------|
-| `GET /clients` | List connected scripts |
-| `GET /eval?script=NAME&code=CODE` | Run JS in the script's page context |
-| `GET /snapshot?script=NAME&selector=SEL` | Get innerHTML of a selector |
-| `GET /probe?script=NAME&selector=SEL` | Check if selector exists |
-| `GET /logs` | Recent log messages from all scripts |
-
-**Usage from Claude Code**: `curl 'http://localhost:9876/snapshot?script=hriflow&selector=.modal-container'`
-
-**In scripts**: call `initBridge("scriptName")` at startup. Panel logs auto-forward to the server.
 
 ### Tampermonkey Auto-Update
 - Scripts include `@updateURL` and `@downloadURL` headers pointing to the raw GitHub URL
@@ -47,29 +28,13 @@ A local WebSocket + HTTP server on `localhost:9876` for live debugging TM script
 
 ### Adding a New Script
 1. Create `src/<name>.ts` with the `// ==UserScript==` header block
-2. `import { initBridge, createPanel, ... } from "./lib"` — use what you need
-3. Call `initBridge("<name>")` at script start for debug server connectivity
-4. Include `@updateURL` and `@downloadURL` pointing to `https://raw.githubusercontent.com/galer7/tampermonkey-scripts/master/dist/<name>.js`
-5. Bump `@version` on every change
-6. Commit — the pre-commit hook handles building and staging `dist/`
+2. `import { createPanel, ... } from "./lib"` — use what you need
+3. Include `@updateURL` and `@downloadURL` pointing to `https://raw.githubusercontent.com/galer7/tampermonkey-scripts/master/dist/<name>.js`
+4. Bump `@version` on every change
+5. Commit — the pre-commit hook handles building and staging `dist/`
 
 ### Debugging a Script
-1. Start the server: `pnpm server`
-2. Open the page where the TM script runs
-3. From CLI: `curl localhost:9876/clients` to verify connection
-4. Inspect DOM: `curl 'localhost:9876/snapshot?script=NAME&selector=.some-class'`
-5. Run code: `curl 'localhost:9876/eval?script=NAME&code=document.title'`
-6. Read logs: `curl localhost:9876/logs`
+Use Browser Bridge (bbx) to read the page, run code in it and click through it.
 
 When a `SelectorError` fires, the panel shows expandable HTML context (click to copy). Paste that to the agent for fixing.
 
-`/eval` gotchas:
-- It returns `String(result)`: `return JSON.stringify(...)`, and stringify DOM or jQuery data field by field (they are circular).
-- It does not await. Start async work, store its result on `window.__x`, and read it with a second `/eval`.
-- It goes to the first connected client with that name. `/hotswap` and duplicate tabs leave old clients connected, so read `/clients` first. Clients in one tab share the DOM.
-- For SPA data the DOM hides, call the app's own API from the page: read the auth from the app store (Vue: `document.querySelector("#app").__vue__.$store`). Keep tokens inside the page, never in the eval output.
-
-### Conventions
-- Use stable CSS selectors (class-based) instead of fragile nth-child paths
-- Centralize selectors in a `SELECTORS` object at the top of each script for easy updates
-- All scripts should call `initBridge()` for debug connectivity
