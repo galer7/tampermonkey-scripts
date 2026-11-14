@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iFlow Bulk Attendance
 // @namespace    http://tampermonkey.net/
-// @version      2.4
+// @version      2.5
 // @description  Bulk-fill monthly attendance from dayData view
 // @author       galer7
 // @match        https://app.hriflow.ro/*
@@ -11,7 +11,7 @@
 // @grant        none
 // ==/UserScript==
 
-import { wait, createPanel, initBridge } from "./lib";
+import { wait, createPanel } from "./lib";
 import type { Panel } from "./lib";
 
 declare const jQuery: any;
@@ -341,12 +341,6 @@ declare const jQuery: any;
 
   let observer: MutationObserver | null = null;
 
-  function destroy() {
-    if (panel) panel.element.remove();
-    if (observer) { observer.disconnect(); observer = null; }
-    clearOverlays();
-  }
-
   function init() {
     if (document.querySelector(".tm-panel")) return;
 
@@ -369,8 +363,6 @@ declare const jQuery: any;
       { id: "iflow-fill", label: "Fill Month", color: "#0cca4a", onClick: fillMonth },
     ]);
   }
-
-  initBridge("hriflow", destroy);
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
